@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "Registration": {
+      "title": "Registration",
+      "description": "Registro de una persona asignada a una sección",
+      "type": "object",
+      "properties": {
+        "personName": { "type": "string" },
+        "sectionId": { "type": "string" },
+        "sectionName": { "type": "string" },
+        "responsibleId": { "type": "string" },
+        "responsibleEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["personName", "sectionId", "responsibleId", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Perfil de usuario del sistema",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] }
+      },
+      "required": ["email"]
+    },
+    "Section": {
+      "title": "Section",
+      "description": "Definición dinámica de una sección",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "order": { "type": "number" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "type": { "type": "string" },
+              "url": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "Settings": {
+      "title": "Settings",
+      "description": "Configuración global de la interfaz",
+      "type": "object",
+      "properties": {
+        "primaryColor": { "type": "string" },
+        "backgroundColor": { "type": "string" },
+        "fontFamily": { "type": "string" }
+      }
+    }
+  },
+  "firestore": {
+    "/registrations/{registrationId}": { "schema": "Registration", "description": "Colección de registros de personal" },
+    "/users/{userId}": { "schema": "User", "description": "Colección de perfiles de usuario" },
+    "/sections/{sectionId}": { "schema": "Section", "description": "Colección dinámica de secciones" },
+    "/settings/global": { "schema": "Settings", "description": "Configuración de la UI" }
+  }
+}

@@ -1,0 +1,256 @@
+import React from 'react';
+import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Target, Rocket, Box, Activity, Palette, Menu, X, LifeBuoy } from 'lucide-react';
+import { auth, db } from '../firebase';
+import { signOut } from 'firebase/auth';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'framer-motion';
+
+interface LayoutProps {
+  children: React.ReactNode;
+  user: any;
+  isAdmin?: boolean;
+}
+
+const ICON_MAP: Record<string, any> = {
+  Shield, Heart, Star, Zap, Target, Rocket, Box, Activity, LayoutGrid: List, Palette
+};
+
+export default function Layout({ children, user, isAdmin }: LayoutProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [appIcon, setAppIcon] = React.useState('Shield');
+  const [logoUrl, setLogoUrl] = React.useState('');
+  const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'sections', 'admin']);
+  const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
+
+  React.useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'settings', 'global'), (d) => {
+      if (d.exists()) {
+        const data = d.data();
+        if (data.appIcon) setAppIcon(data.appIcon);
+        if (data.logoUrl) setLogoUrl(data.logoUrl);
+        if (data.sidebarOrder) setSidebarOrder(data.sidebarOrder);
+        if (data.headerLayout) setHeaderLayout(data.headerLayout);
+      }
+    }, (error) => {
+      console.error("Layout settings error:", error);
+    });
+    return () => unsub();
+  }, []);
+
+  const AppIcon = ICON_MAP[appIcon] || Shield;
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate('/login');
+  };
+
+  const navItems = [
+    { name: 'Panel de Registro', path: '/', icon: LayoutDashboard },
+    { name: 'Secciones', path: '/sections', icon: List },
+  ];
+
+  if (isAdmin) {
+    navItems.push({ name: 'Administración', path: '/admin', icon: Shield });
+  }
+
+  return (
+    <div className="min-h-screen bg-neutral-50 flex flex-col">
+      <header className="bg-white border-b border-neutral-200 px-4 md:px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-4 md:gap-6">
+          <button 
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="p-2 text-neutral-500 hover:bg-neutral-50 rounded-xl md:hidden"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          
+          <div className="flex items-center gap-3 md:gap-6">
+            {headerLayout.map(item => (
+              <React.Fragment key={item}>
+                {item === 'logo' && (
+                  logoUrl ? (
+                    <img 
+                      src={logoUrl} 
+                      alt="Logo" 
+                      className="h-7 md:h-8 w-auto object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="p-1.5 md:p-2 rounded-lg text-white shadow-sm" style={{ backgroundColor: 'var(--primary)' }}>
+                      <AppIcon className="w-4 h-4 md:w-5 md:h-5" />
+                    </div>
+                  )
+                )}
+                {item === 'title' && (
+                  <h1 className="text-lg md:text-xl font-bold text-neutral-900 tracking-tight truncate max-w-[150px] md:max-w-none">
+                    Gestor de Secciones
+                  </h1>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2 md:gap-4">
+          {headerLayout.includes('user') && (
+            <div className="text-right hidden lg:block">
+              <p className="text-sm font-medium text-neutral-900">{user?.displayName || user?.email}</p>
+              <p className="text-xs text-neutral-500">Sesión activa</p>
+            </div>
+          )}
+          <button 
+            onClick={handleLogout}
+            className="p-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+            title="Cerrar sesión"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+      </header>
+
+      <AnimatePresence>
+        {isMobileMenuOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-neutral-900/50 backdrop-blur-sm z-50 md:hidden"
+            />
+            <motion.aside 
+              initial={{ x: '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed inset-y-0 left-0 w-72 bg-white shadow-2xl z-[60] md:hidden flex flex-col p-6"
+            >
+              <div className="flex items-center justify-between mb-8">
+                <div className="flex items-center gap-3">
+                  {logoUrl ? (
+                    <img 
+                      src={logoUrl} 
+                      alt="Logo" 
+                      className="h-8 w-auto object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="p-2 rounded-lg text-white shadow-sm" style={{ backgroundColor: 'var(--primary)' }}>
+                      <AppIcon className="w-5 h-5" />
+                    </div>
+                  )}
+                  <span className="font-bold text-neutral-900">Menú</span>
+                </div>
+                <button 
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-2 text-neutral-400 hover:text-neutral-900 hover:bg-neutral-50 rounded-xl"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {sidebarOrder.map((itemKey) => {
+                  const item = navItems.find(n => {
+                    if (itemKey === 'dashboard') return n.path === '/';
+                    if (itemKey === 'sections') return n.path === '/sections';
+                    if (itemKey === 'admin') return n.path === '/admin';
+                    return false;
+                  });
+                  
+                  if (!item) return null;
+
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`flex items-center gap-3 px-4 py-4 rounded-2xl transition-all ${
+                        location.pathname === item.path
+                          ? 'bg-indigo-50 text-indigo-700 font-bold'
+                          : 'text-neutral-600 hover:bg-neutral-50'
+                      }`}
+                    >
+                      <item.icon className="w-5 h-5" />
+                      {item.name}
+                    </Link>
+                  );
+                })}
+                <a 
+                  href={`https://wa.me/524434008893?text=${encodeURIComponent('Hola Hugo César, necesito ayuda...')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 px-4 py-4 rounded-2xl transition-all text-neutral-600 hover:bg-neutral-50"
+                >
+                  <LifeBuoy className="w-5 h-5" />
+                  Soporte
+                </a>
+              </div>
+
+              <div className="mt-auto pt-6 border-t border-neutral-100">
+                <div className="flex items-center gap-3 p-2">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
+                    {user?.email?.[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-neutral-900 truncate">{user?.displayName || user?.email}</p>
+                    <p className="text-xs text-neutral-500 truncate">{isAdmin ? 'Administrador' : 'Usuario'}</p>
+                  </div>
+                </div>
+              </div>
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-1">
+        <aside className="w-64 bg-white border-r border-neutral-200 hidden md:flex flex-col p-4 gap-2">
+          {sidebarOrder.map((itemKey) => {
+            const item = navItems.find(n => {
+              if (itemKey === 'dashboard') return n.path === '/';
+              if (itemKey === 'sections') return n.path === '/sections';
+              if (itemKey === 'admin') return n.path === '/admin';
+              return false;
+            });
+            
+            if (!item) return null;
+
+            return (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                  location.pathname === item.path
+                    ? 'bg-indigo-50 text-indigo-700 font-medium'
+                    : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
+                }`}
+              >
+                <item.icon className="w-5 h-5" />
+                {item.name}
+              </Link>
+            );
+          })}
+          <a 
+            href={`https://wa.me/524434008893?text=${encodeURIComponent('Hola Hugo César, necesito ayuda...')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 mt-auto"
+          >
+            <LifeBuoy className="w-5 h-5" />
+            Soporte
+          </a>
+        </aside>
+
+        <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,5 @@
+{
+  "name": "Gestor de Secciones HERV",
+  "description": "Aplicación para el registro de responsables de secciones y consulta de biblioteca de archivos.",
+  "requestFramePermissions": []
+}
