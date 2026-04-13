@@ -58,7 +58,7 @@ export default function Login() {
             
             {item === 'footer' && (
               <div className="mt-10 pt-8 border-t border-neutral-100 w-full">
-                <p className="text-xs text-neutral-400 uppercase tracking-widest font-bold">Sistema de Auditoría Interna</p>
+                <p className="text-xs text-neutral-400 uppercase tracking-widest font-bold">BY HCESAR</p>
               </div>
             )}
           </React.Fragment>

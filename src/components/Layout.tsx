@@ -50,7 +50,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      // No need to navigate manually, App.tsx listener will handle it
+      navigate('/login', { replace: true });
     } catch (error) {
       console.error("Error signing out:", error);
       toast.error("Error al cerrar sesión");
