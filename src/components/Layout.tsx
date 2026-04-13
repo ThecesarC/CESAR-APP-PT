@@ -25,6 +25,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'sections', 'admin']);
   const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
   React.useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -49,11 +50,15 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
 
   const handleLogout = async () => {
     try {
+      setIsLoggingOut(true);
+      // Wait to show the goodbye message
+      await new Promise(resolve => setTimeout(resolve, 1500));
       await signOut(auth);
-      navigate('/login', { replace: true });
+      // The global listener in App.tsx will handle the redirect
     } catch (error) {
       console.error("Error signing out:", error);
       toast.error("Error al cerrar sesión");
+      setIsLoggingOut(false);
     }
   };
 
@@ -68,6 +73,39 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
 
   return (
     <div className="min-h-screen bg-neutral-50 flex flex-col">
+      <AnimatePresence>
+        {isLoggingOut && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-indigo-900 flex flex-col items-center justify-center text-white"
+          >
+            <motion.div
+              animate={{ 
+                rotate: [0, 20, -20, 20, 0],
+              }}
+              transition={{ 
+                repeat: Infinity, 
+                duration: 0.6,
+                ease: "easeInOut"
+              }}
+              className="text-8xl mb-6"
+            >
+              👋
+            </motion.div>
+            <motion.h2 
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="text-4xl font-bold tracking-tight"
+            >
+              ¡Adiós!
+            </motion.h2>
+            <p className="text-indigo-200 mt-2">Cerrando sesión de forma segura...</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header className="bg-white border-b border-neutral-200 px-4 md:px-6 py-4 flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-4 md:gap-6">
           <button 
