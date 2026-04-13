@@ -90,7 +90,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 )}
                 {item === 'title' && (
                   <h1 className="text-lg md:text-xl font-bold text-neutral-900 tracking-tight truncate max-w-[150px] md:max-w-none">
-                    Gestor de Secciones
+                    Gestor Territorial HERV
                   </h1>
                 )}
               </React.Fragment>
@@ -105,6 +105,15 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               <p className="text-xs text-neutral-500">Sesión activa</p>
             </div>
           )}
+          <a 
+            href={`https://wa.me/524434008893?text=${encodeURIComponent('Hola Hugo César, necesito ayuda...')}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="p-2 text-neutral-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+            title="Soporte"
+          >
+            <LifeBuoy className="w-5 h-5" />
+          </a>
           <button 
             onClick={handleLogout}
             className="p-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
@@ -236,15 +245,6 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               </Link>
             );
           })}
-          <a 
-            href={`https://wa.me/524434008893?text=${encodeURIComponent('Hola Hugo César, necesito ayuda...')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900 mt-auto"
-          >
-            <LifeBuoy className="w-5 h-5" />
-            Soporte
-          </a>
         </aside>
 
         <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">

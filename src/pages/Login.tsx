@@ -43,7 +43,7 @@ export default function Login() {
             )}
 
             {item === 'description' && (
-              <p className="text-neutral-500 mb-10">Inicia sesión para acceder al panel de gestión de secciones.</p>
+              <p className="text-neutral-500 mb-10">Inicia sesión para acceder al panel del Gestor Territorial HERV.</p>
             )}
             
             {item === 'button' && (
