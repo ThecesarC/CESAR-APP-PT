@@ -1,6 +1,6 @@
 import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
 import { auth, googleProvider, db } from '../firebase';
-import { LogIn, ShieldCheck } from 'lucide-react';
+import { LogIn } from 'lucide-react';
 import { toast } from 'sonner';
 import { doc, onSnapshot } from 'firebase/firestore';
 import React, { useState, useEffect } from 'react';
@@ -33,8 +33,13 @@ export default function Login() {
         {loginOrder.map((item) => (
           <React.Fragment key={item}>
             {item === 'icon' && (
-              <div className="inline-flex p-4 bg-indigo-50 rounded-2xl mb-6">
-                <ShieldCheck className="w-10 h-10 text-indigo-600" />
+              <div className="mb-8 w-full flex justify-center">
+                <img 
+                  src="https://i.postimg.cc/DwhTQc8s/Whats-App-Image-2024-10-10-at-3-15-36-PM.jpg" 
+                  alt="Hugo Rangel Logo" 
+                  className="h-32 md:h-40 w-auto object-contain"
+                  referrerPolicy="no-referrer"
+                />
               </div>
             )}
             
