@@ -5,6 +5,7 @@ import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -47,8 +48,13 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const AppIcon = ICON_MAP[appIcon] || Shield;
 
   const handleLogout = async () => {
-    await signOut(auth);
-    navigate('/login');
+    try {
+      await signOut(auth);
+      // No need to navigate manually, App.tsx listener will handle it
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast.error("Error al cerrar sesión");
+    }
   };
 
   const navItems = [
