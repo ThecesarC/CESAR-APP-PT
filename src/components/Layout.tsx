@@ -54,7 +54,8 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
       // Wait to show the goodbye message
       await new Promise(resolve => setTimeout(resolve, 1500));
       await signOut(auth);
-      // The global listener in App.tsx will handle the redirect
+      // Manual fallback redirect for environments like Netlify
+      window.location.href = '/login';
     } catch (error) {
       console.error("Error signing out:", error);
       toast.error("Error al cerrar sesión");
