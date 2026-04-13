@@ -80,7 +80,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-indigo-900 flex flex-col items-center justify-center text-white"
+            className="fixed inset-0 z-[100] bg-red-600 flex flex-col items-center justify-center text-white"
           >
             <motion.div
               animate={{ 
@@ -91,9 +91,9 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 duration: 0.6,
                 ease: "easeInOut"
               }}
-              className="text-8xl mb-6"
+              className="mb-6 text-8xl"
             >
-              👋
+              👋🏻
             </motion.div>
             <motion.h2 
               initial={{ y: 20, opacity: 0 }}
@@ -102,7 +102,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             >
               ¡Adiós!
             </motion.h2>
-            <p className="text-indigo-200 mt-2">Cerrando sesión de forma segura...</p>
+            <p className="text-red-100 mt-2">Cerrando sesión de forma segura...</p>
           </motion.div>
         )}
       </AnimatePresence>
