@@ -3,7 +3,7 @@ import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Targ
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, onSnapshot, collection, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, collection, getDocs, getCountFromServer } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -34,13 +34,21 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   }, [location.pathname]);
 
   React.useEffect(() => {
-    // Initial fetch to ensure we have data even if onSnapshot is slow
+    // Initial fetch using getCountFromServer for better reliability
     const fetchInitialCount = async () => {
       try {
-        const snapshot = await getDocs(collection(db, 'registrations'));
-        setRegistrationCount(snapshot.size);
+        const coll = collection(db, 'registrations');
+        const snapshot = await getCountFromServer(coll);
+        setRegistrationCount(snapshot.data().count);
       } catch (error) {
         console.error("Initial count fetch error:", error);
+        // Fallback to getDocs if getCountFromServer fails
+        try {
+          const snapshot = await getDocs(collection(db, 'registrations'));
+          setRegistrationCount(snapshot.size);
+        } catch (e) {
+          console.error("Fallback fetch error:", e);
+        }
       }
     };
     
@@ -53,7 +61,24 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
     });
 
     return () => unsubRegistrations();
-  }, [db]);
+  }, []);
+
+  React.useEffect(() => {
+    if (registrationCount === 0) {
+      const timer = setTimeout(async () => {
+        try {
+          const coll = collection(db, 'registrations');
+          const snapshot = await getCountFromServer(coll);
+          if (snapshot.data().count > 0) {
+            setRegistrationCount(snapshot.data().count);
+          }
+        } catch (e) {
+          console.error("Layout retry error:", e);
+        }
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [registrationCount]);
 
   const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
@@ -186,6 +211,13 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             <LifeBuoy className="w-5 h-5" />
           </a>
           <button 
+            onClick={() => window.location.reload()}
+            className="p-2 text-neutral-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+            title="Actualizar Sistema"
+          >
+            <Rocket className="w-5 h-5" />
+          </button>
+          <button 
             onClick={handleLogout}
             className="p-2 text-neutral-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
             title="Cerrar sesión"
@@ -238,7 +270,24 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
 
               <div className="mb-6 p-4 bg-red-50 rounded-2xl border border-red-100">
                 <div className="flex justify-between items-end mb-2">
-                  <span className="text-xs font-bold text-red-600 uppercase tracking-wider">Avance de Secciones</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-red-600 uppercase tracking-wider">Avance de Secciones</span>
+                    <button 
+                      onClick={async () => {
+                        try {
+                          const coll = collection(db, 'registrations');
+                          const snapshot = await getCountFromServer(coll);
+                          setRegistrationCount(snapshot.data().count);
+                          toast.success('Avance actualizado');
+                        } catch (e) {
+                          console.error("Mobile refresh error:", e);
+                        }
+                      }}
+                      className="p-1 hover:bg-red-100 rounded-full transition-colors"
+                    >
+                      <Rocket className="w-3 h-3 text-red-400" />
+                    </button>
+                  </div>
                   <span className="text-sm font-black text-red-700">{progressPercentage}%</span>
                 </div>
                 <div className="w-full h-2.5 bg-red-200 rounded-full overflow-hidden">
@@ -311,7 +360,23 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
         <aside className="w-64 bg-white border-r border-neutral-200 hidden md:flex flex-col p-4 gap-2">
           <div className="mb-4 p-4 bg-red-50 rounded-2xl border border-red-100">
             <div className="flex justify-between items-end mb-2">
-              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Avance Total</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Avance Total</span>
+                <button 
+                  onClick={async () => {
+                    try {
+                      const coll = collection(db, 'registrations');
+                      const snapshot = await getCountFromServer(coll);
+                      setRegistrationCount(snapshot.data().count);
+                    } catch (e) {
+                      console.error("Sidebar refresh error:", e);
+                    }
+                  }}
+                  className="p-0.5 hover:bg-red-100 rounded transition-colors"
+                >
+                  <Rocket className="w-2.5 h-2.5 text-red-400" />
+                </button>
+              </div>
               <span className="text-xs font-black text-red-600">{progressPercentage}%</span>
             </div>
             <div className="w-full h-2 bg-red-200 rounded-full overflow-hidden">
@@ -325,6 +390,9 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             <p className="text-[9px] text-red-400 mt-2 font-medium text-center">
               {registrationCount} de {TOTAL_SECTIONS} secciones cubiertas
             </p>
+            {registrationCount === 0 && (
+              <p className="text-[7px] text-red-300 italic text-center mt-1">Buscando datos...</p>
+            )}
           </div>
 
           {sidebarOrder.map((itemKey) => {

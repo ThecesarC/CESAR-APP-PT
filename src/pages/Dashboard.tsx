@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, where, getDocs, doc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, where, getDocs, doc, getCountFromServer } from 'firebase/firestore';
 import { toast } from 'sonner';
-import { UserPlus, History, User as UserIcon, MapPin, Phone, Camera, X } from 'lucide-react';
+import { UserPlus, History, User as UserIcon, MapPin, Phone, Camera, X, Rocket } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion } from 'framer-motion';
@@ -21,13 +21,21 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
   const TOTAL_SECTIONS = 188;
 
   useEffect(() => {
-    // Initial fetch
+    // Initial fetch using getCountFromServer
     const fetchInitialCount = async () => {
       try {
-        const snap = await getDocs(collection(db, 'registrations'));
-        setRegistrationCount(snap.size);
+        const coll = collection(db, 'registrations');
+        const snapshot = await getCountFromServer(coll);
+        setRegistrationCount(snapshot.data().count);
       } catch (e) {
         console.error("Dashboard initial count error:", e);
+        // Fallback
+        try {
+          const snap = await getDocs(collection(db, 'registrations'));
+          setRegistrationCount(snap.size);
+        } catch (err) {
+          console.error("Dashboard fallback error:", err);
+        }
       }
     };
     fetchInitialCount();
@@ -75,7 +83,24 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       unsubscribe();
       unsubCount();
     };
-  }, [db]);
+  }, []);
+
+  useEffect(() => {
+    if (registrationCount === 0) {
+      const timer = setTimeout(async () => {
+        try {
+          const coll = collection(db, 'registrations');
+          const snapshot = await getCountFromServer(coll);
+          if (snapshot.data().count > 0) {
+            setRegistrationCount(snapshot.data().count);
+          }
+        } catch (e) {
+          console.error("Retry fetch error:", e);
+        }
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [registrationCount]);
 
   const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
@@ -183,13 +208,61 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
               <div className="max-w-2xl">
                 <h2 className="text-3xl font-bold text-neutral-900 mb-2">Bienvenido de nuevo</h2>
                 <p className="text-neutral-500">Aquí tienes un resumen de tus secciones y recursos disponibles.</p>
+                <p className="text-[10px] text-neutral-400 mt-1">Conectado como: {user?.email}</p>
               </div>
               
               <div className="bg-white p-5 rounded-3xl border border-neutral-200 shadow-sm flex-1 max-w-sm">
                 <div className="flex justify-between items-end mb-3">
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Avance del Territorio</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Avance del Territorio</span>
+                      <button 
+                        onClick={() => {
+                          const fetchInitialCount = async () => {
+                            try {
+                              const coll = collection(db, 'registrations');
+                              const snapshot = await getCountFromServer(coll);
+                              setRegistrationCount(snapshot.data().count);
+                              toast.success('Avance actualizado');
+                            } catch (e) {
+                              console.error("Manual refresh error:", e);
+                              toast.error('Error al actualizar');
+                            }
+                          };
+                          fetchInitialCount();
+                        }}
+                        className="p-1 hover:bg-neutral-100 rounded-full transition-colors"
+                        title="Recargar avance"
+                      >
+                        <Rocket className="w-3 h-3 text-neutral-400" />
+                      </button>
+                    </div>
                     <span className="text-2xl font-black text-red-600">{progressPercentage}%</span>
+                    <div className="flex flex-col gap-1 mt-1">
+                      {registrationCount === 0 && (
+                        <div className="flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
+                          <p className="text-[8px] text-red-400 italic">Sincronizando...</p>
+                        </div>
+                      )}
+                      <button 
+                        onClick={async () => {
+                          const toastId = toast.loading('Sincronizando avance...');
+                          try {
+                            const coll = collection(db, 'registrations');
+                            const snapshot = await getCountFromServer(coll);
+                            setRegistrationCount(snapshot.data().count);
+                            toast.success('Sincronización completa', { id: toastId });
+                          } catch (e) {
+                            console.error("Sync error:", e);
+                            toast.error('Error de conexión', { id: toastId });
+                          }
+                        }}
+                        className="text-[9px] font-bold text-indigo-600 hover:text-indigo-700 underline text-left"
+                      >
+                        Forzar sincronización ahora
+                      </button>
+                    </div>
                   </div>
                   <div className="text-right">
                     <span className="text-xs font-bold text-neutral-900">{registrationCount}</span>
