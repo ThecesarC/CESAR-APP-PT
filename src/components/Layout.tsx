@@ -348,7 +348,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               </div>
 
               {mapEmbedUrl && (
-                <div className="mt-6 px-2 flex-none flex flex-col h-[400px]">
+                <div className="mt-6 px-2 flex-1 flex flex-col min-h-[350px]">
                   <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
                     <iframe 
                       src={mapEmbedUrl} 
@@ -360,7 +360,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                     href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                    className="mt-2 flex-none flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
                   >
                     <MapPin className="w-3 h-3" />
                     Abrir Mapa Completo
@@ -450,7 +450,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
           })}
 
           {mapEmbedUrl && (
-            <div className="mt-4 mb-4 px-2 flex-none flex flex-col h-[350px]">
+            <div className="mt-4 mb-4 px-2 flex-1 flex flex-col min-h-[300px]">
               <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
                 <iframe 
                   src={mapEmbedUrl} 
@@ -462,7 +462,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                className="mt-2 flex-none flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
               >
                 <MapPin className="w-3 h-3" />
                 Abrir Mapa Completo
