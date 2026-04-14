@@ -6,6 +6,9 @@
       "type": "object",
       "properties": {
         "personName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "ineFrontUrl": { "type": "string", "description": "URL de la foto frontal de la INE" },
+        "ineBackUrl": { "type": "string", "description": "URL de la foto reverso de la INE" },
         "sectionId": { "type": "string" },
         "sectionName": { "type": "string" },
         "responsibleId": { "type": "string" },

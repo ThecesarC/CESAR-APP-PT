@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, Download, FileSpreadsheet, ExternalLink, User, Calendar, Image as ImageIcon, Video, Link as LinkIcon, X, Maximize2 } from 'lucide-react';
+import { ArrowLeft, FileText, Download, FileSpreadsheet, ExternalLink, User, Calendar, Image as ImageIcon, Video, Link as LinkIcon, X, Maximize2, Phone, CreditCard } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { collection, query, where, getDocs, limit, doc, onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
@@ -84,6 +84,12 @@ export default function SectionDetail() {
                     <Calendar className="w-3 h-3 flex-shrink-0" />
                     <span className="truncate">Registrado el {responsible.createdAt?.toDate ? format(responsible.createdAt.toDate(), 'dd MMM yyyy', { locale: es }) : 'Recientemente'}</span>
                   </div>
+                  {responsible.phoneNumber && (
+                    <div className="flex items-center gap-2 text-xs text-neutral-500">
+                      <Phone className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">{responsible.phoneNumber}</span>
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 text-[10px] text-indigo-600 font-medium">
                     <span className="truncate">Asignado por: {responsible.responsibleEmail}</span>
                   </div>
@@ -104,72 +110,127 @@ export default function SectionDetail() {
           )}
         </div>
 
-        <div className="space-y-4">
-          <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest">Biblioteca de Archivos</h3>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {section.files.map((file: any, index: number) => (
-              <div 
-                key={index}
-                className="flex items-center justify-between p-5 rounded-2xl bg-neutral-50 border border-neutral-100 group hover:bg-white hover:border-indigo-200 transition-all"
-              >
-                <div className="flex items-center gap-4">
-                  <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 ${
-                    file.type === 'pdf' ? 'bg-red-50 text-red-600' : 
-                    file.type === 'excel' ? 'bg-emerald-50 text-emerald-600' :
-                    file.type === 'image' ? 'bg-blue-50 text-blue-600' :
-                    file.type === 'video' ? 'bg-purple-50 text-purple-600' :
-                    'bg-neutral-100 text-neutral-600'
-                  }`}>
+        <div className="space-y-6">
+          {responsible && (responsible.ineFrontUrl || responsible.ineBackUrl) && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest flex items-center gap-2">
+                <CreditCard className="w-4 h-4" />
+                Documentación INE
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {responsible.ineFrontUrl && (
+                  <div className="relative group aspect-video rounded-2xl overflow-hidden border border-neutral-200 bg-neutral-50">
+                    <img 
+                      src={responsible.ineFrontUrl} 
+                      alt="INE Frontal" 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button 
+                        onClick={() => setSelectedImage(responsible.ineFrontUrl)}
+                        className="p-3 bg-white text-indigo-600 rounded-xl shadow-xl transform scale-90 group-hover:scale-100 transition-transform"
+                      >
+                        <Maximize2 className="w-6 h-6" />
+                      </button>
+                    </div>
+                    <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-lg text-[10px] font-bold text-neutral-900 uppercase tracking-wider shadow-sm">
+                      INE Frontal
+                    </div>
+                  </div>
+                )}
+                {responsible.ineBackUrl && (
+                  <div className="relative group aspect-video rounded-2xl overflow-hidden border border-neutral-200 bg-neutral-50">
+                    <img 
+                      src={responsible.ineBackUrl} 
+                      alt="INE Reverso" 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button 
+                        onClick={() => setSelectedImage(responsible.ineBackUrl)}
+                        className="p-3 bg-white text-indigo-600 rounded-xl shadow-xl transform scale-90 group-hover:scale-100 transition-transform"
+                      >
+                        <Maximize2 className="w-6 h-6" />
+                      </button>
+                    </div>
+                    <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur px-3 py-1 rounded-lg text-[10px] font-bold text-neutral-900 uppercase tracking-wider shadow-sm">
+                      INE Reverso
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-neutral-400 uppercase tracking-widest">Biblioteca de Archivos</h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {section.files.map((file: any, index: number) => (
+                <div 
+                  key={index}
+                  className="flex items-center justify-between p-5 rounded-2xl bg-neutral-50 border border-neutral-100 group hover:bg-white hover:border-indigo-200 transition-all"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`w-16 h-16 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0 ${
+                      file.type === 'pdf' ? 'bg-red-50 text-red-600' : 
+                      file.type === 'excel' ? 'bg-emerald-50 text-emerald-600' :
+                      file.type === 'image' ? 'bg-blue-50 text-blue-600' :
+                      file.type === 'video' ? 'bg-purple-50 text-purple-600' :
+                      'bg-neutral-100 text-neutral-600'
+                    }`}>
+                      {file.type === 'image' && file.url ? (
+                        <img src={file.url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <>
+                          {file.type === 'pdf' && <FileText className="w-7 h-7" />}
+                          {file.type === 'excel' && <FileSpreadsheet className="w-7 h-7" />}
+                          {file.type === 'image' && <ImageIcon className="w-7 h-7" />}
+                          {file.type === 'video' && <Video className="w-7 h-7" />}
+                          {file.type === 'link' && <LinkIcon className="w-7 h-7" />}
+                        </>
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-bold text-neutral-800">{file.name}</p>
+                      <p className="text-xs text-neutral-500 uppercase font-bold tracking-wider">{file.type}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
                     {file.type === 'image' && file.url ? (
-                      <img src={file.url} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      <button 
+                        onClick={() => setSelectedImage(file.url)}
+                        className="p-2 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Ver Imagen"
+                      >
+                        <Maximize2 className="w-5 h-5" />
+                      </button>
                     ) : (
-                      <>
-                        {file.type === 'pdf' && <FileText className="w-7 h-7" />}
-                        {file.type === 'excel' && <FileSpreadsheet className="w-7 h-7" />}
-                        {file.type === 'image' && <ImageIcon className="w-7 h-7" />}
-                        {file.type === 'video' && <Video className="w-7 h-7" />}
-                        {file.type === 'link' && <LinkIcon className="w-7 h-7" />}
-                      </>
+                      <a 
+                        href={file.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Abrir"
+                      >
+                        <ExternalLink className="w-5 h-5" />
+                      </a>
                     )}
-                  </div>
-                  <div>
-                    <p className="font-bold text-neutral-800">{file.name}</p>
-                    <p className="text-xs text-neutral-500 uppercase font-bold tracking-wider">{file.type}</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  {file.type === 'image' && file.url ? (
-                    <button 
-                      onClick={() => setSelectedImage(file.url)}
-                      className="p-2 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                      title="Ver Imagen"
-                    >
-                      <Maximize2 className="w-5 h-5" />
-                    </button>
-                  ) : (
                     <a 
                       href={file.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      download={file.name}
                       className="p-2 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                      title="Abrir"
+                      title="Descargar"
                     >
-                      <ExternalLink className="w-5 h-5" />
+                      <Download className="w-5 h-5" />
                     </a>
-                  )}
-                  <a 
-                    href={file.url}
-                    download={file.name}
-                    className="p-2 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                    title="Descargar"
-                  >
-                    <Download className="w-5 h-5" />
-                  </a>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>

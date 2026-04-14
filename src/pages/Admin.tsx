@@ -426,7 +426,10 @@ export default function Admin() {
         'Hora': reg.createdAt?.toDate ? format(reg.createdAt.toDate(), 'HH:mm:ss') : 'N/A',
         'Registrado por (Email)': reg.responsibleEmail || 'N/A',
         'Persona Registrada': reg.personName || 'N/A',
-        'Sección': reg.sectionName || 'N/A'
+        'Teléfono': reg.phoneNumber || 'N/A',
+        'Sección': reg.sectionName || 'N/A',
+        'INE Frontal (URL)': reg.ineFrontUrl || 'N/A',
+        'INE Reverso (URL)': reg.ineBackUrl || 'N/A'
       }));
 
       // Create worksheet
@@ -1251,8 +1254,9 @@ export default function Admin() {
                   <tr className="bg-neutral-50 border-b border-neutral-200">
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Fecha / Hora</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Registrado por</th>
-                    <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Persona Registrada</th>
+                    <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Persona / Teléfono</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Sección</th>
+                    <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Documentación</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
@@ -1269,11 +1273,30 @@ export default function Admin() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-neutral-600">{reg.responsibleEmail}</td>
-                      <td className="px-6 py-4 text-sm font-bold text-neutral-900">{reg.personName}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="text-sm font-bold text-neutral-900">{reg.personName}</span>
+                          <span className="text-xs text-neutral-500">{reg.phoneNumber || 'Sin teléfono'}</span>
+                        </div>
+                      </td>
                       <td className="px-6 py-4">
                         <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-bold">
                           {reg.sectionName}
                         </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex gap-2">
+                          {reg.ineFrontUrl && (
+                            <a href={reg.ineFrontUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-neutral-100 rounded-lg text-neutral-500 hover:text-indigo-600 transition-colors" title="Ver INE Frontal">
+                              <ImageIcon className="w-4 h-4" />
+                            </a>
+                          )}
+                          {reg.ineBackUrl && (
+                            <a href={reg.ineBackUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 bg-neutral-100 rounded-lg text-neutral-500 hover:text-indigo-600 transition-colors" title="Ver INE Reverso">
+                              <ImageIcon className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
