@@ -16,6 +16,9 @@ import {
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
 
 function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmText = "Eliminar", type = "danger" }: any) {
   if (!isOpen) return null;
@@ -417,20 +420,45 @@ export default function Admin() {
   };
 
   const exportToExcel = async () => {
+    if (registrations.length === 0) {
+      toast.error('No hay registros para exportar');
+      return;
+    }
+
     try {
-      const XLSX = await import('xlsx');
-      
-      // Prepare data for Excel
-      const excelData = registrations.map(reg => ({
-        'Fecha': reg.createdAt?.toDate ? format(reg.createdAt.toDate(), 'dd/MM/yyyy') : 'N/A',
-        'Hora': reg.createdAt?.toDate ? format(reg.createdAt.toDate(), 'HH:mm:ss') : 'N/A',
-        'Registrado por (Email)': reg.responsibleEmail || 'N/A',
-        'Persona Registrada': reg.personName || 'N/A',
-        'Teléfono': reg.phoneNumber || 'N/A',
-        'Sección': reg.sectionName || 'N/A',
-        'INE Frontal (URL)': reg.ineFrontUrl || 'N/A',
-        'INE Reverso (URL)': reg.ineBackUrl || 'N/A'
-      }));
+      // Prepare data for Excel with extra safety
+      const excelData = registrations.map(reg => {
+        let dateStr = 'N/A';
+        let timeStr = 'N/A';
+
+        try {
+          const date = reg.createdAt && typeof reg.createdAt.toDate === 'function' 
+            ? reg.createdAt.toDate() 
+            : (reg.createdAt instanceof Date ? reg.createdAt : null);
+
+          if (date && !isNaN(date.getTime())) {
+            dateStr = format(date, 'dd/MM/yyyy');
+            timeStr = format(date, 'HH:mm:ss');
+          }
+        } catch (e) {
+          console.error('Error formatting date for record:', reg.id, e);
+        }
+
+        return {
+          'Fecha': dateStr,
+          'Hora': timeStr,
+          'Registrado por (Email)': reg.responsibleEmail || 'N/A',
+          'Persona Registrada': reg.personName || 'N/A',
+          'Teléfono': reg.phoneNumber || 'N/A',
+          'Sección': reg.sectionName || 'N/A',
+          'INE Frontal (URL/Base64)': reg.ineFrontUrl && reg.ineFrontUrl.length > 32000 
+            ? 'Imagen demasiado grande para Excel (Ver en sistema)' 
+            : (reg.ineFrontUrl || 'N/A'),
+          'INE Reverso (URL/Base64)': reg.ineBackUrl && reg.ineBackUrl.length > 32000 
+            ? 'Imagen demasiado grande para Excel (Ver en sistema)' 
+            : (reg.ineBackUrl || 'N/A')
+        };
+      });
 
       // Create worksheet
       const ws = XLSX.utils.json_to_sheet(excelData);
@@ -439,13 +467,66 @@ export default function Admin() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Registros');
 
-      // Generate file and download
-      XLSX.writeFile(wb, `Registros_Actividad_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`);
+      // Generate file and download using a more direct method for iframes
+      const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Registros_Actividad_${format(new Date(), 'yyyy-MM-dd_HHmm')}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
       
       toast.success('Archivo Excel generado correctamente');
     } catch (error) {
       console.error('Error exporting to Excel:', error);
-      toast.error('Error al generar el archivo Excel');
+      toast.error('Error al generar el archivo Excel. Por favor intenta de nuevo.');
+    }
+  };
+
+  const downloadImagesZip = async () => {
+    if (registrations.length === 0) {
+      toast.error('No hay registros con imágenes');
+      return;
+    }
+
+    const toastId = toast.loading('Generando paquete de imágenes...');
+    
+    try {
+      const zip = new JSZip();
+      const imgFolder = zip.folder("INE_Imagenes");
+      
+      let count = 0;
+      registrations.forEach((reg) => {
+        const safeName = reg.personName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        
+        if (reg.ineFrontUrl && reg.ineFrontUrl.startsWith('data:image')) {
+          const base64Data = reg.ineFrontUrl.split(',')[1];
+          imgFolder?.file(`${safeName}_frontal.jpg`, base64Data, {base64: true});
+          count++;
+        }
+        
+        if (reg.ineBackUrl && reg.ineBackUrl.startsWith('data:image')) {
+          const base64Data = reg.ineBackUrl.split(',')[1];
+          imgFolder?.file(`${safeName}_reverso.jpg`, base64Data, {base64: true});
+          count++;
+        }
+      });
+
+      if (count === 0) {
+        toast.error('No se encontraron imágenes para descargar', { id: toastId });
+        return;
+      }
+
+      const content = await zip.generateAsync({type: "blob"});
+      saveAs(content, `INE_Imagenes_${format(new Date(), 'yyyy-MM-dd')}.zip`);
+      
+      toast.success(`Paquete generado con ${count} imágenes`, { id: toastId });
+    } catch (error) {
+      console.error('Error generating ZIP:', error);
+      toast.error('Error al generar el paquete de imágenes', { id: toastId });
     }
   };
 
@@ -1239,13 +1320,22 @@ export default function Admin() {
                 <h3 className="text-lg font-bold text-neutral-900">Historial de Registros</h3>
                 <p className="text-sm text-neutral-500">Consulta y descarga todos los registros realizados en tiempo real.</p>
               </div>
-              <button 
-                onClick={exportToExcel}
-                className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
-              >
-                <Download className="w-4 h-4" />
-                Descargar Excel
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button 
+                  onClick={downloadImagesZip}
+                  className="flex items-center justify-center gap-2 bg-amber-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-amber-700 transition-all shadow-lg shadow-amber-100"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  Descargar Fotos (ZIP)
+                </button>
+                <button 
+                  onClick={exportToExcel}
+                  className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+                >
+                  <Download className="w-4 h-4" />
+                  Descargar Excel
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto border border-neutral-100 rounded-2xl">
