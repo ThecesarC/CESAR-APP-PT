@@ -48,7 +48,7 @@ export default function Login() {
             )}
 
             {item === 'description' && (
-              <p className="text-neutral-500 mb-10">Inicia sesión para acceder al panel del Gestor Territorial HERV.</p>
+              <p className="text-neutral-500 mb-10">Inicia sesión para acceder al panel del SISTEMA TERRITORIAL HUGO RANGEL.</p>
             )}
             
             {item === 'button' && (
@@ -63,7 +63,14 @@ export default function Login() {
             
             {item === 'footer' && (
               <div className="mt-10 pt-8 border-t border-neutral-100 w-full">
-                <p className="text-xs text-neutral-400 uppercase tracking-widest font-bold">BY HCESAR</p>
+                <a 
+                  href="https://wa.me/524434008893?text=HOLA%20CESAR,%20REQUIERO%20INFORMACION..." 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs text-neutral-400 uppercase tracking-widest font-bold hover:text-indigo-600 transition-colors"
+                >
+                  BY HCESAR
+                </a>
               </div>
             )}
           </React.Fragment>

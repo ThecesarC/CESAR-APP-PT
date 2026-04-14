@@ -135,7 +135,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 )}
                 {item === 'title' && (
                   <h1 className="text-lg md:text-xl font-bold text-neutral-900 tracking-tight truncate max-w-[150px] md:max-w-none">
-                    Gestor Territorial HERV
+                    SISTEMA TERRITORIAL HUGO RANGEL
                   </h1>
                 )}
               </React.Fragment>
