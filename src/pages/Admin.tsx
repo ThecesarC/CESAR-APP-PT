@@ -298,9 +298,12 @@ export default function Admin() {
   const [users, setUsers] = useState<any[]>([]);
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
+  const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>([]);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+  const [showBulkRegDeleteConfirm, setShowBulkRegDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  const [regToDelete, setRegToDelete] = useState<string | null>(null);
   const [uiSettings, setUiSettings] = useState({
     primaryColor: '#4f46e5',
     backgroundColor: '#f9fafb',
@@ -534,6 +537,46 @@ export default function Admin() {
     setSelectedSections(prev => 
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]
     );
+  };
+
+  const toggleRegSelection = (id: string) => {
+    setSelectedRegistrations(prev => 
+      prev.includes(id) ? prev.filter(r => r !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllRegs = () => {
+    if (selectedRegistrations.length === registrations.length) {
+      setSelectedRegistrations([]);
+    } else {
+      setSelectedRegistrations(registrations.map(r => r.id));
+    }
+  };
+
+  const deleteRegistration = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'registrations', id));
+      toast.success('Registro eliminado');
+    } catch (error) {
+      console.error('Error deleting registration:', error);
+      toast.error('Error al eliminar el registro');
+    }
+  };
+
+  const deleteSelectedRegistrations = async () => {
+    const toastId = toast.loading('Eliminando registros seleccionados...');
+    try {
+      const batch = writeBatch(db);
+      selectedRegistrations.forEach(id => {
+        batch.delete(doc(db, 'registrations', id));
+      });
+      await batch.commit();
+      setSelectedRegistrations([]);
+      toast.success(`${selectedRegistrations.length} registros eliminados`, { id: toastId });
+    } catch (error) {
+      console.error('Error deleting registrations:', error);
+      toast.error('Error al eliminar los registros', { id: toastId });
+    }
   };
 
   const toggleSelectAll = () => {
@@ -1321,6 +1364,15 @@ export default function Admin() {
                 <p className="text-sm text-neutral-500">Consulta y descarga todos los registros realizados en tiempo real.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                {selectedRegistrations.length > 0 && (
+                  <button 
+                    onClick={() => setShowBulkRegDeleteConfirm(true)}
+                    className="flex items-center justify-center gap-2 bg-red-50 text-red-600 px-6 py-3 rounded-xl font-bold hover:bg-red-100 transition-all border border-red-100"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar ({selectedRegistrations.length})
+                  </button>
+                )}
                 <button 
                   onClick={downloadImagesZip}
                   className="flex items-center justify-center gap-2 bg-amber-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-amber-700 transition-all shadow-lg shadow-amber-100"
@@ -1338,20 +1390,49 @@ export default function Admin() {
               </div>
             </div>
 
+            {registrations.length > 0 && (
+              <div className="flex items-center gap-4 bg-neutral-50 p-4 rounded-2xl border border-neutral-100">
+                <button 
+                  onClick={toggleSelectAllRegs}
+                  className="flex items-center gap-2 text-sm font-bold text-neutral-600 hover:text-indigo-600 transition-colors"
+                >
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedRegistrations.length === registrations.length ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-neutral-300'}`}>
+                    {selectedRegistrations.length === registrations.length && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                  </div>
+                  Seleccionar Todo
+                </button>
+                {selectedRegistrations.length > 0 && (
+                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
+                    {selectedRegistrations.length} seleccionados
+                  </span>
+                )}
+              </div>
+            )}
+
             <div className="overflow-x-auto border border-neutral-100 rounded-2xl">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-neutral-50 border-b border-neutral-200">
+                    <th className="px-6 py-4 w-10"></th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Fecha / Hora</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Registrado por</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Persona / Teléfono</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Sección</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Documentación</th>
+                    <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider text-right">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-100">
                   {registrations.map(reg => (
-                    <tr key={reg.id} className="hover:bg-neutral-50 transition-colors">
+                    <tr key={reg.id} className={`hover:bg-neutral-50 transition-colors ${selectedRegistrations.includes(reg.id) ? 'bg-indigo-50/30' : ''}`}>
+                      <td className="px-6 py-4">
+                        <button 
+                          onClick={() => toggleRegSelection(reg.id)}
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedRegistrations.includes(reg.id) ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-neutral-300'}`}
+                        >
+                          {selectedRegistrations.includes(reg.id) && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                        </button>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-neutral-900">
@@ -1388,11 +1469,20 @@ export default function Admin() {
                           )}
                         </div>
                       </td>
+                      <td className="px-6 py-4 text-right">
+                        <button 
+                          onClick={() => setRegToDelete(reg.id)}
+                          className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                          title="Eliminar registro"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {registrations.length === 0 && (
                     <tr>
-                      <td colSpan={4} className="px-6 py-20 text-center text-neutral-400">
+                      <td colSpan={7} className="px-6 py-20 text-center text-neutral-400">
                         No hay registros disponibles.
                       </td>
                     </tr>
@@ -1400,6 +1490,22 @@ export default function Admin() {
                 </tbody>
               </table>
             </div>
+
+            <ConfirmModal 
+              isOpen={!!regToDelete}
+              onClose={() => setRegToDelete(null)}
+              onConfirm={() => regToDelete && deleteRegistration(regToDelete)}
+              title="¿Eliminar registro?"
+              message="Esta acción no se puede deshacer. Se eliminará permanentemente la información y las fotos de este responsable."
+            />
+
+            <ConfirmModal 
+              isOpen={showBulkRegDeleteConfirm}
+              onClose={() => setShowBulkRegDeleteConfirm(false)}
+              onConfirm={deleteSelectedRegistrations}
+              title={`¿Eliminar ${selectedRegistrations.length} registros?`}
+              message={`Estás a punto de eliminar permanentemente ${selectedRegistrations.length} registros seleccionados. ¿Deseas continuar?`}
+            />
           </div>
         )}
       </div>

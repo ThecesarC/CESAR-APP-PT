@@ -16,6 +16,8 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
   const [recentRegistrations, setRecentRegistrations] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [dashboardOrder, setDashboardOrder] = useState(['welcome', 'form', 'activity']);
+  const [registrationCount, setRegistrationCount] = useState(0);
+  const TOTAL_SECTIONS = 188;
 
   useEffect(() => {
     // Fetch Global Settings for dashboard order
@@ -49,12 +51,19 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       handleFirestoreError(error, OperationType.LIST, 'registrations');
     });
 
+    const unsubCount = onSnapshot(collection(db, 'registrations'), (snap) => {
+      setRegistrationCount(snap.size);
+    });
+
     return () => {
       unsubSettings();
       unsubSections();
       unsubscribe();
+      unsubCount();
     };
   }, []);
+
+  const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
     const file = e.target.files?.[0];
@@ -156,9 +165,30 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       {dashboardOrder.map((item) => (
         <React.Fragment key={item}>
           {item === 'welcome' && (
-            <div className="max-w-2xl">
-              <h2 className="text-3xl font-bold text-neutral-900 mb-2">Bienvenido de nuevo</h2>
-              <p className="text-neutral-500">Aquí tienes un resumen de tus secciones y recursos disponibles.</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="max-w-2xl">
+                <h2 className="text-3xl font-bold text-neutral-900 mb-2">Bienvenido de nuevo</h2>
+                <p className="text-neutral-500">Aquí tienes un resumen de tus secciones y recursos disponibles.</p>
+              </div>
+              
+              <div className="bg-white p-5 rounded-3xl border border-neutral-200 shadow-sm flex-1 max-w-sm">
+                <div className="flex justify-between items-end mb-3">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Avance del Territorio</span>
+                    <span className="text-2xl font-black text-red-600">{progressPercentage}%</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-neutral-900">{registrationCount}</span>
+                    <span className="text-xs text-neutral-400"> / {TOTAL_SECTIONS}</span>
+                  </div>
+                </div>
+                <div className="w-full h-3 bg-red-50 rounded-full overflow-hidden border border-red-50">
+                  <div 
+                    className="h-full bg-red-600 rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(220,38,38,0.4)]"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+              </div>
             </div>
           )}
           

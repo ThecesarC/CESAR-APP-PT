@@ -3,7 +3,7 @@ import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Targ
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -26,10 +26,24 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+  const [registrationCount, setRegistrationCount] = React.useState(0);
+  const TOTAL_SECTIONS = 188;
 
   React.useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  React.useEffect(() => {
+    const unsubRegistrations = onSnapshot(collection(db, 'registrations'), (snapshot) => {
+      setRegistrationCount(snapshot.size);
+    }, (error) => {
+      console.error("Registrations count error:", error);
+    });
+
+    return () => unsubRegistrations();
+  }, []);
+
+  const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
   React.useEffect(() => {
     const unsub = onSnapshot(doc(db, 'settings', 'global'), (d) => {
@@ -210,6 +224,23 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 </button>
               </div>
 
+              <div className="mb-6 p-4 bg-red-50 rounded-2xl border border-red-100">
+                <div className="flex justify-between items-end mb-2">
+                  <span className="text-xs font-bold text-red-600 uppercase tracking-wider">Avance de Secciones</span>
+                  <span className="text-sm font-black text-red-700">{progressPercentage}%</span>
+                </div>
+                <div className="w-full h-2.5 bg-red-200 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPercentage}%` }}
+                    className="h-full bg-red-600 rounded-full"
+                  />
+                </div>
+                <p className="text-[10px] text-red-500 mt-2 font-medium">
+                  {registrationCount} de {TOTAL_SECTIONS} responsables registrados
+                </p>
+              </div>
+
               <div className="flex flex-col gap-2">
                 {sidebarOrder.map((itemKey) => {
                   const item = navItems.find(n => {
@@ -265,6 +296,23 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
 
       <div className="flex flex-1">
         <aside className="w-64 bg-white border-r border-neutral-200 hidden md:flex flex-col p-4 gap-2">
+          <div className="mb-4 p-4 bg-red-50 rounded-2xl border border-red-100">
+            <div className="flex justify-between items-end mb-2">
+              <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Avance Total</span>
+              <span className="text-xs font-black text-red-600">{progressPercentage}%</span>
+            </div>
+            <div className="w-full h-2 bg-red-200 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${progressPercentage}%` }}
+                className="h-full bg-red-600 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.3)]"
+              />
+            </div>
+            <p className="text-[9px] text-red-400 mt-2 font-medium text-center">
+              {registrationCount} de {TOTAL_SECTIONS} secciones cubiertas
+            </p>
+          </div>
+
           {sidebarOrder.map((itemKey) => {
             const item = navItems.find(n => {
               if (itemKey === 'dashboard') return n.path === '/';
