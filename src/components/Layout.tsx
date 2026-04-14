@@ -3,7 +3,7 @@ import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Targ
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, onSnapshot, collection } from 'firebase/firestore';
+import { doc, onSnapshot, collection, getDocs } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -34,6 +34,18 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   }, [location.pathname]);
 
   React.useEffect(() => {
+    // Initial fetch to ensure we have data even if onSnapshot is slow
+    const fetchInitialCount = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'registrations'));
+        setRegistrationCount(snapshot.size);
+      } catch (error) {
+        console.error("Initial count fetch error:", error);
+      }
+    };
+    
+    fetchInitialCount();
+
     const unsubRegistrations = onSnapshot(collection(db, 'registrations'), (snapshot) => {
       setRegistrationCount(snapshot.size);
     }, (error) => {
@@ -41,7 +53,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
     });
 
     return () => unsubRegistrations();
-  }, []);
+  }, [db]);
 
   const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
@@ -231,6 +243,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 </div>
                 <div className="w-full h-2.5 bg-red-200 rounded-full overflow-hidden">
                   <motion.div 
+                    key={progressPercentage}
                     initial={{ width: 0 }}
                     animate={{ width: `${progressPercentage}%` }}
                     className="h-full bg-red-600 rounded-full"
@@ -303,6 +316,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             </div>
             <div className="w-full h-2 bg-red-200 rounded-full overflow-hidden">
               <motion.div 
+                key={progressPercentage}
                 initial={{ width: 0 }}
                 animate={{ width: `${progressPercentage}%` }}
                 className="h-full bg-red-600 rounded-full shadow-[0_0_10px_rgba(220,38,38,0.3)]"

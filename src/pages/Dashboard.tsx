@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { UserPlus, History, User as UserIcon, MapPin, Phone, Camera, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { motion } from 'framer-motion';
 
 export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boolean }) {
   const [personName, setPersonName] = useState('');
@@ -20,6 +21,17 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
   const TOTAL_SECTIONS = 188;
 
   useEffect(() => {
+    // Initial fetch
+    const fetchInitialCount = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'registrations'));
+        setRegistrationCount(snap.size);
+      } catch (e) {
+        console.error("Dashboard initial count error:", e);
+      }
+    };
+    fetchInitialCount();
+
     // Fetch Global Settings for dashboard order
     const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (d) => {
       if (d.exists() && d.data().dashboardOrder) {
@@ -53,6 +65,8 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
     const unsubCount = onSnapshot(collection(db, 'registrations'), (snap) => {
       setRegistrationCount(snap.size);
+    }, (error) => {
+      console.error("Dashboard count snapshot error:", error);
     });
 
     return () => {
@@ -61,7 +75,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       unsubscribe();
       unsubCount();
     };
-  }, []);
+  }, [db]);
 
   const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
@@ -183,9 +197,12 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                   </div>
                 </div>
                 <div className="w-full h-3 bg-red-50 rounded-full overflow-hidden border border-red-50">
-                  <div 
+                  <motion.div 
+                    key={progressPercentage}
                     className="h-full bg-red-600 rounded-full transition-all duration-1000 ease-out shadow-[0_0_15px_rgba(220,38,38,0.4)]"
                     style={{ width: `${progressPercentage}%` }}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progressPercentage}%` }}
                   />
                 </div>
               </div>
