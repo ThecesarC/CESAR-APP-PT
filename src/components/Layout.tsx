@@ -21,7 +21,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [appIcon, setAppIcon] = React.useState('Shield');
-  const [logoUrl, setLogoUrl] = React.useState('');
+  const [logoUrl, setLogoUrl] = React.useState('https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg');
   const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'sections', 'admin']);
   const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);

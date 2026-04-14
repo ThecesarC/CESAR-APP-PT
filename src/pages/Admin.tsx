@@ -306,7 +306,7 @@ export default function Admin() {
     backgroundColor: '#f9fafb',
     fontFamily: 'Inter, sans-serif',
     appIcon: 'Shield',
-    logoUrl: '',
+    logoUrl: 'https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg',
     dashboardOrder: ['welcome', 'form', 'activity'],
     sidebarOrder: ['dashboard', 'sections', 'admin'],
     headerLayout: ['logo', 'title', 'user'],

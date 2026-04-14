@@ -35,7 +35,7 @@ export default function Login() {
             {item === 'icon' && (
               <div className="mb-8 w-full flex justify-center">
                 <img 
-                  src="https://i.postimg.cc/DwhTQc8s/Whats-App-Image-2024-10-10-at-3-15-36-PM.jpg" 
+                  src="https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg" 
                   alt="Hugo Rangel Logo" 
                   className="h-32 md:h-40 w-auto object-contain"
                   referrerPolicy="no-referrer"
