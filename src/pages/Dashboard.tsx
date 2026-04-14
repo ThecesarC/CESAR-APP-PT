@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, where, getDocs, doc, getCountFromServer } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, where, getDocs, doc, getCountFromServer, getDocsFromServer } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { UserPlus, History, User as UserIcon, MapPin, Phone, Camera, X, Rocket } from 'lucide-react';
 import { format } from 'date-fns';
@@ -247,20 +247,21 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                       )}
                       <button 
                         onClick={async () => {
-                          const toastId = toast.loading('Sincronizando avance...');
+                          const toastId = toast.loading('Sincronización forzada (Chrome Fix)...');
                           try {
                             const coll = collection(db, 'registrations');
-                            const snapshot = await getCountFromServer(coll);
-                            setRegistrationCount(snapshot.data().count);
+                            // getDocsFromServer bypasses any local cache/IndexedDB
+                            const snapshot = await getDocsFromServer(coll);
+                            setRegistrationCount(snapshot.size);
                             toast.success('Sincronización completa', { id: toastId });
                           } catch (e) {
                             console.error("Sync error:", e);
-                            toast.error('Error de conexión', { id: toastId });
+                            toast.error('Error de conexión. Verifica que Chrome no esté bloqueando cookies de terceros.', { id: toastId });
                           }
                         }}
                         className="text-[9px] font-bold text-indigo-600 hover:text-indigo-700 underline text-left"
                       >
-                        Forzar sincronización ahora
+                        Forzar sincronización ahora (Chrome Fix)
                       </button>
                     </div>
                   </div>

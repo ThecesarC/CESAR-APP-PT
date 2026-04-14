@@ -3,7 +3,7 @@ import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Targ
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, onSnapshot, collection, getDocs, getCountFromServer } from 'firebase/firestore';
+import { doc, onSnapshot, collection, getDocs, getCountFromServer, getDocsFromServer } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -274,13 +274,16 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                     <span className="text-xs font-bold text-red-600 uppercase tracking-wider">Avance de Secciones</span>
                     <button 
                       onClick={async () => {
+                        const toastId = toast.loading('Sincronizando...');
                         try {
                           const coll = collection(db, 'registrations');
-                          const snapshot = await getCountFromServer(coll);
-                          setRegistrationCount(snapshot.data().count);
-                          toast.success('Avance actualizado');
+                          // Use getDocsFromServer for Chrome
+                          const snapshot = await getDocsFromServer(coll);
+                          setRegistrationCount(snapshot.size);
+                          toast.success('Avance actualizado', { id: toastId });
                         } catch (e) {
                           console.error("Mobile refresh error:", e);
+                          toast.error('Error al sincronizar', { id: toastId });
                         }
                       }}
                       className="p-1 hover:bg-red-100 rounded-full transition-colors"
@@ -366,8 +369,8 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                   onClick={async () => {
                     try {
                       const coll = collection(db, 'registrations');
-                      const snapshot = await getCountFromServer(coll);
-                      setRegistrationCount(snapshot.data().count);
+                      const snapshot = await getDocsFromServer(coll);
+                      setRegistrationCount(snapshot.size);
                     } catch (e) {
                       console.error("Sidebar refresh error:", e);
                     }
