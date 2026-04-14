@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Target, Rocket, Box, Activity, Palette, Menu, X, LifeBuoy } from 'lucide-react';
+import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Target, Rocket, Box, Activity, Palette, Menu, X, LifeBuoy, MapPin } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -22,6 +22,8 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const location = useLocation();
   const [appIcon, setAppIcon] = React.useState('Shield');
   const [logoUrl, setLogoUrl] = React.useState('https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg');
+  const [mapUrl, setMapUrl] = React.useState('https://i.postimg.cc/0j64X30q/MAPA-HUGO-RANGEL.jpg');
+  const [mapEmbedUrl, setMapEmbedUrl] = React.useState('https://www.google.com/maps/d/embed?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ');
   const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'sections', 'admin']);
   const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
@@ -88,6 +90,8 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
         const data = d.data();
         if (data.appIcon) setAppIcon(data.appIcon);
         if (data.logoUrl) setLogoUrl(data.logoUrl);
+        if (data.mapUrl) setMapUrl(data.mapUrl);
+        if (data.mapEmbedUrl) setMapEmbedUrl(data.mapEmbedUrl);
         if (data.sidebarOrder) setSidebarOrder(data.sidebarOrder);
         if (data.headerLayout) setHeaderLayout(data.headerLayout);
       }
@@ -242,7 +246,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-72 bg-white shadow-2xl z-[60] md:hidden flex flex-col p-6"
+              className="fixed inset-y-0 left-0 w-80 bg-white shadow-2xl z-[60] md:hidden flex flex-col p-6 overflow-y-auto overscroll-contain"
             >
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
@@ -343,6 +347,27 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 </a>
               </div>
 
+              {mapEmbedUrl && (
+                <div className="mt-6 px-2 flex-none flex flex-col h-[400px]">
+                  <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
+                    <iframe 
+                      src={mapEmbedUrl} 
+                      className="w-full h-full border-0"
+                      title="Mapa Territorial Interactivo"
+                    />
+                  </div>
+                  <a 
+                    href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                  >
+                    <MapPin className="w-3 h-3" />
+                    Abrir Mapa Completo
+                  </a>
+                </div>
+              )}
+
               <div className="mt-auto pt-6 border-t border-neutral-100">
                 <div className="flex items-center gap-3 p-2">
                   <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
@@ -360,7 +385,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
       </AnimatePresence>
 
       <div className="flex flex-1">
-        <aside className="w-64 bg-white border-r border-neutral-200 hidden md:flex flex-col p-4 gap-2">
+        <aside className="w-72 bg-white border-r border-neutral-200 hidden md:flex flex-col p-4 gap-2 sticky top-16 h-[calc(100vh-64px)] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-neutral-200">
           <div className="mb-4 p-4 bg-red-50 rounded-2xl border border-red-100">
             <div className="flex justify-between items-end mb-2">
               <div className="flex items-center gap-1.5">
@@ -423,6 +448,27 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               </Link>
             );
           })}
+
+          {mapEmbedUrl && (
+            <div className="mt-4 mb-4 px-2 flex-none flex flex-col h-[350px]">
+              <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
+                <iframe 
+                  src={mapEmbedUrl} 
+                  className="w-full h-full border-0"
+                  title="Mapa Territorial Interactivo"
+                />
+              </div>
+              <a 
+                href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+              >
+                <MapPin className="w-3 h-3" />
+                Abrir Mapa Completo
+              </a>
+            </div>
+          )}
         </aside>
 
         <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
