@@ -2,20 +2,40 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { db } from '../firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { Search, ChevronRight, LayoutGrid } from 'lucide-react';
+import { Search, ChevronRight, LayoutGrid, CheckCircle2, XCircle } from 'lucide-react';
 
 export default function Sections() {
   const [searchTerm, setSearchTerm] = useState('');
   const [sections, setSections] = useState<any[]>([]);
+  const [assignedSectionIds, setAssignedSectionIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    const q = query(collection(db, 'sections'), orderBy('order', 'asc'));
-    const unsubscribe = onSnapshot(q, (snap) => {
+    // Listen to sections
+    const qSections = query(collection(db, 'sections'), orderBy('order', 'asc'));
+    const unsubSections = onSnapshot(qSections, (snap) => {
       setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => {
       console.error("Error fetching sections:", error);
     });
-    return () => unsubscribe();
+
+    // Listen to registrations to know which sections are assigned
+    const unsubRegs = onSnapshot(collection(db, 'registrations'), (snap) => {
+      const assignedIds = new Set<string>();
+      snap.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.sectionId) {
+          assignedIds.add(data.sectionId);
+        }
+      });
+      setAssignedSectionIds(assignedIds);
+    }, (error) => {
+      console.error("Error fetching registrations for status:", error);
+    });
+
+    return () => {
+      unsubSections();
+      unsubRegs();
+    };
   }, []);
 
   const filteredSections = sections.filter(section => 
@@ -29,7 +49,19 @@ export default function Sections() {
           <div className="bg-indigo-100 p-2 rounded-lg">
             <LayoutGrid className="text-indigo-600 w-5 h-5" />
           </div>
-          <h2 className="text-2xl font-bold text-neutral-900">Catálogo de Secciones</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-neutral-900">Catálogo de Secciones</h2>
+            <div className="flex items-center gap-4 mt-1">
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-[10px] font-bold text-neutral-500 uppercase">Asignada</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 rounded-full bg-red-500" />
+                <span className="text-[10px] font-bold text-neutral-500 uppercase">Pendiente</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="relative max-w-md w-full">
@@ -45,19 +77,35 @@ export default function Sections() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {filteredSections.map((section) => (
-          <Link
-            key={section.id}
-            to={`/sections/${section.id}`}
-            className="group bg-white p-6 rounded-2xl border border-neutral-200 hover:border-indigo-300 hover:shadow-md transition-all flex items-center justify-between"
-          >
-            <div>
-              <h3 className="font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors">{section.name}</h3>
-              <p className="text-xs text-neutral-500 mt-1">Ver archivos disponibles</p>
-            </div>
-            <ChevronRight className="w-5 h-5 text-neutral-300 group-hover:text-indigo-400 group-hover:translate-x-1 transition-all" />
-          </Link>
-        ))}
+        {filteredSections.map((section) => {
+          const isAssigned = assignedSectionIds.has(section.id);
+          return (
+            <Link
+              key={section.id}
+              to={`/sections/${section.id}`}
+              className={`group p-6 rounded-2xl border transition-all flex items-center justify-between bg-white ${
+                isAssigned 
+                  ? 'border-emerald-100 hover:border-emerald-300 hover:shadow-emerald-50' 
+                  : 'border-red-100 hover:border-red-300 hover:shadow-red-50'
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <div className={`p-2 rounded-xl ${isAssigned ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                  {isAssigned ? <CheckCircle2 className="w-5 h-5" /> : <XCircle className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className={`font-bold transition-colors ${isAssigned ? 'text-emerald-900 group-hover:text-emerald-600' : 'text-red-900 group-hover:text-red-600'}`}>
+                    {section.name}
+                  </h3>
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${isAssigned ? 'text-emerald-500' : 'text-red-400'}`}>
+                    {isAssigned ? 'Asignada' : 'Sin Responsable'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className={`w-5 h-5 transition-all ${isAssigned ? 'text-emerald-300 group-hover:text-emerald-500' : 'text-red-200 group-hover:text-red-400'} group-hover:translate-x-1`} />
+            </Link>
+          );
+        })}
       </div>
 
       {filteredSections.length === 0 && (
