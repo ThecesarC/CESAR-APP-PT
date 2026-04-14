@@ -15,7 +15,7 @@
         "responsibleEmail": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["personName", "sectionId", "responsibleId", "createdAt"]
+      "required": ["personName", "phoneNumber", "ineFrontUrl", "ineBackUrl", "sectionId", "responsibleId", "createdAt"]
     },
     "User": {
       "title": "User",

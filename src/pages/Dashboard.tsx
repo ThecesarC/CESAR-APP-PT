@@ -174,32 +174,41 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div>
-                    <label className="block text-sm font-semibold text-neutral-700 mb-2">Nombre de la Persona</label>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-2">
+                      Nombre de la Persona <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="text"
                       value={personName}
                       onChange={(e) => setPersonName(e.target.value)}
                       placeholder="Ej. Juan Pérez"
+                      required
                       className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-neutral-700 mb-2">Número de Teléfono</label>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-2">
+                      Número de Teléfono <span className="text-red-500">*</span>
+                    </label>
                     <input
                       type="tel"
                       value={phoneNumber}
                       onChange={(e) => setPhoneNumber(e.target.value)}
                       placeholder="Ej. 4431234567"
+                      required
                       className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-neutral-700 mb-2">Seccion</label>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-2">
+                      Seccion <span className="text-red-500">*</span>
+                    </label>
                     <select
                       value={sectionId}
                       onChange={(e) => setSectionId(e.target.value)}
+                      required
                       className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-white"
                     >
                       <option value="">Selecciona una sección</option>
@@ -214,7 +223,9 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-neutral-700">INE Frontal</label>
+                    <label className="block text-sm font-semibold text-neutral-700">
+                      INE Frontal <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative group">
                       {ineFront ? (
                         <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-indigo-500">
@@ -231,14 +242,16 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                         <label className="flex flex-col items-center justify-center aspect-video rounded-2xl border-2 border-dashed border-neutral-200 bg-neutral-50 hover:bg-neutral-100 hover:border-indigo-400 transition-all cursor-pointer group">
                           <Camera className="w-8 h-8 text-neutral-400 group-hover:text-indigo-600 mb-2" />
                           <span className="text-sm font-medium text-neutral-500 group-hover:text-indigo-600">Subir Foto Frontal</span>
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'front')} />
+                          <input type="file" accept="image/*" className="hidden" required onChange={(e) => handleFileUpload(e, 'front')} />
                         </label>
                       )}
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-neutral-700">INE Reverso</label>
+                    <label className="block text-sm font-semibold text-neutral-700">
+                      INE Reverso <span className="text-red-500">*</span>
+                    </label>
                     <div className="relative group">
                       {ineBack ? (
                         <div className="relative aspect-video rounded-2xl overflow-hidden border-2 border-indigo-500">
@@ -255,7 +268,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                         <label className="flex flex-col items-center justify-center aspect-video rounded-2xl border-2 border-dashed border-neutral-200 bg-neutral-50 hover:bg-neutral-100 hover:border-indigo-400 transition-all cursor-pointer group">
                           <Camera className="w-8 h-8 text-neutral-400 group-hover:text-indigo-600 mb-2" />
                           <span className="text-sm font-medium text-neutral-500 group-hover:text-indigo-600">Subir Foto Reverso</span>
-                          <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileUpload(e, 'back')} />
+                          <input type="file" accept="image/*" className="hidden" required onChange={(e) => handleFileUpload(e, 'back')} />
                         </label>
                       )}
                     </div>
