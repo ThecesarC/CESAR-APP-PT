@@ -30,7 +30,20 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function isQuotaError(error: any) {
+  return (
+    error?.code === 'resource-exhausted' || 
+    error?.message?.includes('Quota exceeded') ||
+    error?.message?.includes('INTERNAL ASSERTION FAILED')
+  );
+}
+
+export function handleFirestoreError(error: any, operationType: OperationType, path: string | null) {
+  // Ignore quota errors and internal assertion failures to prevent console flooding
+  if (isQuotaError(error)) {
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {

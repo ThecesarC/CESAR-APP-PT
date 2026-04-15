@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db } from './firebase';
+import { auth, db, isQuotaError } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { Toaster } from 'sonner';
 
@@ -47,12 +47,21 @@ export default function App() {
             setUser(firebaseUser);
           } catch (error) {
             console.error("Error syncing user data:", error);
-            setUser(firebaseUser); // Still allow login even if Firestore sync fails
+            setUser(firebaseUser);
           } finally {
             setLoading(false);
           }
         }, (error) => {
-          console.error("User snapshot error:", error);
+          if (!isQuotaError(error)) {
+            console.error("User snapshot error:", error);
+          }
+          // Fallback user data if quota is hit
+          setUserData({
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            role: firebaseUser.email === 'hugocesarlemuscortes@gmail.com' ? 'admin' : 'user'
+          });
           setUser(firebaseUser);
           setLoading(false);
         });

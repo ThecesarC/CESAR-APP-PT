@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType, isQuotaError } from '../firebase';
 import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, where, getDocs, doc, getCountFromServer, getDocsFromServer } from 'firebase/firestore';
 import { toast } from 'sonner';
 import { UserPlus, History, User as UserIcon, MapPin, Phone, Camera, X, Rocket } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion } from 'framer-motion';
+import { FALLBACK_SECTIONS } from '../constants/sections';
 
 export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boolean }) {
   const [personName, setPersonName] = useState('');
@@ -15,7 +16,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
   const [sectionId, setSectionId] = useState('');
   const [loading, setLoading] = useState(false);
   const [recentRegistrations, setRecentRegistrations] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>(FALLBACK_SECTIONS);
   const [dashboardOrder, setDashboardOrder] = useState(['welcome', 'form', 'activity']);
   const [registrationCount, setRegistrationCount] = useState(0);
   const TOTAL_SECTIONS = 188;
@@ -27,14 +28,18 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
         const coll = collection(db, 'registrations');
         const snapshot = await getCountFromServer(coll);
         setRegistrationCount(snapshot.data().count);
-      } catch (e) {
-        console.error("Dashboard initial count error:", e);
+      } catch (e: any) {
+        if (!isQuotaError(e)) {
+          console.error("Dashboard initial count error:", e);
+        }
         // Fallback
         try {
           const snap = await getDocs(collection(db, 'registrations'));
           setRegistrationCount(snap.size);
-        } catch (err) {
-          console.error("Dashboard fallback error:", err);
+        } catch (err: any) {
+          if (!isQuotaError(err)) {
+            console.error("Dashboard fallback error:", err);
+          }
         }
       }
     };
@@ -45,14 +50,22 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       if (d.exists() && d.data().dashboardOrder) {
         setDashboardOrder(d.data().dashboardOrder);
       }
+    }, (error) => {
+      if (!isQuotaError(error)) {
+        console.error("Dashboard settings error:", error);
+      }
     });
 
     // Fetch Sections for dropdown
     const qSections = query(collection(db, 'sections'), orderBy('order', 'asc'));
     const unsubSections = onSnapshot(qSections, (snap) => {
-      setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      if (!snap.empty) {
+        setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'sections');
+      if (!isQuotaError(error)) {
+        handleFirestoreError(error, OperationType.LIST, 'sections');
+      }
     });
 
     const q = query(
@@ -68,13 +81,17 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       }));
       setRecentRegistrations(regs);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'registrations');
+      if (!isQuotaError(error)) {
+        handleFirestoreError(error, OperationType.LIST, 'registrations');
+      }
     });
 
     const unsubCount = onSnapshot(collection(db, 'registrations'), (snap) => {
       setRegistrationCount(snap.size);
     }, (error) => {
-      console.error("Dashboard count snapshot error:", error);
+      if (!isQuotaError(error)) {
+        console.error("Dashboard count snapshot error:", error);
+      }
     });
 
     return () => {
@@ -94,8 +111,10 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
           if (snapshot.data().count > 0) {
             setRegistrationCount(snapshot.data().count);
           }
-        } catch (e) {
-          console.error("Retry fetch error:", e);
+        } catch (e: any) {
+          if (!isQuotaError(e)) {
+            console.error("Retry fetch error:", e);
+          }
         }
       }, 3000);
       return () => clearTimeout(timer);
@@ -191,9 +210,13 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       setIneFront(null);
       setIneBack(null);
       setSectionId('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'registrations');
-      toast.error('Error al guardar el registro');
+    } catch (error: any) {
+      if (error?.code !== 'resource-exhausted') {
+        handleFirestoreError(error, OperationType.CREATE, 'registrations');
+        toast.error('Error al guardar el registro');
+      } else {
+        toast.error('Límite de cuota excedido. Intenta más tarde.');
+      }
     } finally {
       setLoading(false);
     }
@@ -224,8 +247,10 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                               const snapshot = await getCountFromServer(coll);
                               setRegistrationCount(snapshot.data().count);
                               toast.success('Avance actualizado');
-                            } catch (e) {
-                              console.error("Manual refresh error:", e);
+                            } catch (e: any) {
+                              if (!isQuotaError(e)) {
+                                console.error("Manual refresh error:", e);
+                              }
                               toast.error('Error al actualizar');
                             }
                           };
@@ -254,8 +279,10 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                             const snapshot = await getDocsFromServer(coll);
                             setRegistrationCount(snapshot.size);
                             toast.success('Sincronización completa', { id: toastId });
-                          } catch (e) {
-                            console.error("Sync error:", e);
+                          } catch (e: any) {
+                            if (e?.code !== 'resource-exhausted') {
+                              console.error("Sync error:", e);
+                            }
                             toast.error('Error de conexión. Verifica que Chrome no esté bloqueando cookies de terceros.', { id: toastId });
                           }
                         }}

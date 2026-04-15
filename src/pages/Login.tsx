@@ -1,5 +1,5 @@
 import { signInWithPopup, onAuthStateChanged } from 'firebase/auth';
-import { auth, googleProvider, db } from '../firebase';
+import { auth, googleProvider, db, isQuotaError } from '../firebase';
 import { LogIn } from 'lucide-react';
 import { toast } from 'sonner';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -12,6 +12,10 @@ export default function Login() {
     const unsub = onSnapshot(doc(db, 'settings', 'global'), (d) => {
       if (d.exists() && d.data().loginOrder) {
         setLoginOrder(d.data().loginOrder);
+      }
+    }, (error) => {
+      if (!isQuotaError(error)) {
+        console.error("Login settings error:", error);
       }
     });
     return () => unsub();

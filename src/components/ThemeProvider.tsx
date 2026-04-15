@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../firebase';
+import { db, isQuotaError } from '../firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 export default function ThemeProvider({ children }: { children: React.ReactNode }) {
@@ -11,7 +11,9 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
         setSettings(doc.data());
       }
     }, (error) => {
-      console.error("Theme settings error:", error);
+      if (!isQuotaError(error)) {
+        console.error("Theme settings error:", error);
+      }
     });
     return () => unsubscribe();
   }, []);

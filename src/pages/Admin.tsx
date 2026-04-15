@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType, isQuotaError } from '../firebase';
 import { 
   collection, doc, getDocs, updateDoc, setDoc, deleteDoc, 
   query, orderBy, onSnapshot, writeBatch, addDoc as fireAddDoc
@@ -352,14 +352,18 @@ export default function Admin() {
       setSections(docs);
       setLayoutSections(docs);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'sections');
+      if (!isQuotaError(error)) {
+        handleFirestoreError(error, OperationType.LIST, 'sections');
+      }
     });
 
     // Fetch Users
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
       setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'users');
+      if (!isQuotaError(error)) {
+        handleFirestoreError(error, OperationType.LIST, 'users');
+      }
     });
 
     // Fetch UI Settings
@@ -376,7 +380,9 @@ export default function Admin() {
         }));
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'settings/global');
+      if (!isQuotaError(error)) {
+        handleFirestoreError(error, OperationType.GET, 'settings/global');
+      }
     });
 
     // Fetch All Registrations for Excel Export
@@ -384,7 +390,9 @@ export default function Admin() {
     const unsubRegs = onSnapshot(qRegs, (snap) => {
       setRegistrations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'registrations');
+      if (!isQuotaError(error)) {
+        handleFirestoreError(error, OperationType.LIST, 'registrations');
+      }
     });
 
     return () => {

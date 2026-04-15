@@ -42,14 +42,18 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
         const coll = collection(db, 'registrations');
         const snapshot = await getCountFromServer(coll);
         setRegistrationCount(snapshot.data().count);
-      } catch (error) {
-        console.error("Initial count fetch error:", error);
+      } catch (error: any) {
+        if (!isQuotaError(error)) {
+          console.error("Initial count fetch error:", error);
+        }
         // Fallback to getDocs if getCountFromServer fails
         try {
           const snapshot = await getDocs(collection(db, 'registrations'));
           setRegistrationCount(snapshot.size);
-        } catch (e) {
-          console.error("Fallback fetch error:", e);
+        } catch (e: any) {
+          if (!isQuotaError(e)) {
+            console.error("Fallback fetch error:", e);
+          }
         }
       }
     };
@@ -59,7 +63,9 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
     const unsubRegistrations = onSnapshot(collection(db, 'registrations'), (snapshot) => {
       setRegistrationCount(snapshot.size);
     }, (error) => {
-      console.error("Registrations count error:", error);
+      if (!isQuotaError(error)) {
+        console.error("Registrations count error:", error);
+      }
     });
 
     return () => unsubRegistrations();
@@ -74,8 +80,10 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
           if (snapshot.data().count > 0) {
             setRegistrationCount(snapshot.data().count);
           }
-        } catch (e) {
-          console.error("Layout retry error:", e);
+        } catch (e: any) {
+          if (!isQuotaError(e)) {
+            console.error("Layout retry error:", e);
+          }
         }
       }, 4000);
       return () => clearTimeout(timer);
@@ -96,7 +104,9 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
         if (data.headerLayout) setHeaderLayout(data.headerLayout);
       }
     }, (error) => {
-      console.error("Layout settings error:", error);
+      if (error.code !== 'resource-exhausted') {
+        console.error("Layout settings error:", error);
+      }
     });
     return () => unsub();
   }, []);

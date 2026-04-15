@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Download, FileSpreadsheet, ExternalLink, User, Calendar, Image as ImageIcon, Video, Link as LinkIcon, X, Maximize2, Phone, CreditCard } from 'lucide-react';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, OperationType, isQuotaError } from '../firebase';
 import { collection, query, where, getDocs, limit, doc, onSnapshot } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -23,7 +23,9 @@ export default function SectionDetail() {
         setSection({ id: snap.id, ...snap.data() });
       }
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `sections/${sectionId}`);
+      if (!isQuotaError(error)) {
+        handleFirestoreError(error, OperationType.GET, `sections/${sectionId}`);
+      }
     });
 
     async function fetchResponsible() {
@@ -37,8 +39,10 @@ export default function SectionDetail() {
         if (!querySnapshot.empty) {
           setResponsible(querySnapshot.docs[0].data());
         }
-      } catch (error) {
-        handleFirestoreError(error, OperationType.GET, 'registrations');
+      } catch (error: any) {
+        if (!isQuotaError(error)) {
+          handleFirestoreError(error, OperationType.GET, 'registrations');
+        }
       } finally {
         setLoading(false);
       }

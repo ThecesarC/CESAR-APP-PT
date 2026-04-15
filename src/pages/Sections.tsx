@@ -1,21 +1,26 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { db } from '../firebase';
+import { db, isQuotaError } from '../firebase';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Search, ChevronRight, LayoutGrid, CheckCircle2, XCircle } from 'lucide-react';
+import { FALLBACK_SECTIONS } from '../constants/sections';
 
 export default function Sections() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sections, setSections] = useState<any[]>([]);
+  const [sections, setSections] = useState<any[]>(FALLBACK_SECTIONS);
   const [assignedSectionIds, setAssignedSectionIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     // Listen to sections
     const qSections = query(collection(db, 'sections'), orderBy('order', 'asc'));
     const unsubSections = onSnapshot(qSections, (snap) => {
-      setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      if (!snap.empty) {
+        setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      }
     }, (error) => {
-      console.error("Error fetching sections:", error);
+      if (!isQuotaError(error)) {
+        console.error("Error fetching sections:", error);
+      }
     });
 
     // Listen to registrations to know which sections are assigned
@@ -29,7 +34,9 @@ export default function Sections() {
       });
       setAssignedSectionIds(assignedIds);
     }, (error) => {
-      console.error("Error fetching registrations for status:", error);
+      if (!isQuotaError(error)) {
+        console.error("Error fetching registrations for status:", error);
+      }
     });
 
     return () => {
