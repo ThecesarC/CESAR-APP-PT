@@ -2,50 +2,87 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
+    // Catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // ===============================================================
-    // Helper Functions
+    // Global Helpers
     // ===============================================================
+    function isSignedIn() { return request.auth != null; }
+    function isEmailVerified() { return request.auth.token.email_verified == true; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
     
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
+    // Admin check: Robustly identifying admins
     function isAdmin() {
-      return isAuthenticated() && 
-             (request.auth.token.email == "hugocesarlemuscortes@gmail.com" || 
-              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin");
-    }
-
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+      let isMasterEmail = isSignedIn() && request.auth.token.email != null && (
+        request.auth.token.email.lower() == "hugocesarlemuscortes@gmail.com" ||
+        request.auth.token.email.lower() == "bunkerhrv@gmail.com"
+      );
+      let isDbAdmin = isSignedIn() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == "admin";
+      
+      return isMasterEmail || isDbAdmin;
     }
 
     // ===============================================================
-    // Rules
+    // Entity Validations
+    // ===============================================================
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'displayName', 'role']) &&
+             data.email is string && data.email.size() < 256 &&
+             data.displayName is string && data.displayName.size() < 100 &&
+             data.role in ['admin', 'user'] &&
+             (!('assignedSections' in data) || data.assignedSections is list);
+    }
+
+    function isValidRegistration(data) {
+      return data.keys().hasAll(['personName', 'phoneNumber', 'sectionId', 'casilla', 'createdAt']) &&
+             data.personName is string && data.personName.size() > 0 &&
+             data.phoneNumber is string && data.phoneNumber.size() >= 10 &&
+             data.sectionId is string &&
+             data.casilla is string && data.casilla.size() > 0 &&
+             data.createdAt == request.time;
+    }
+
+    function isValidSection(data) {
+      return data.keys().hasAll(['name', 'order']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.order is number &&
+             (!('casillas' in data) || data.casillas is list) &&
+             (!('assignedTo' in data) || data.assignedTo is string) &&
+             (!('createdAt' in data) || true);
+    }
+
+    // ===============================================================
+    // Collection Matches
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create, update: if isOwner(userId) || isAdmin();
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin(); // Only admins list all users
+      allow create: if isAdmin() || (request.auth.uid == userId && isValidUser(incoming()));
+      allow update: if isAdmin() || (request.auth.uid == userId && isValidUser(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']));
+      allow delete: if isAdmin();
     }
 
     match /registrations/{regId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update, delete: if isAdmin();
+      allow get: if isSignedIn();
+      allow list: if isSignedIn(); // Broad read for the team
+      allow create: if isSignedIn() && isValidRegistration(incoming());
+      allow update: if isAdmin() && isValidRegistration(incoming());
+      allow delete: if isAdmin();
     }
 
     match /sections/{sectionId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && isValidSection(incoming());
+      allow delete: if isAdmin();
     }
 
     match /settings/{settingId} {

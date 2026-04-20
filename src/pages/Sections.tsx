@@ -1,49 +1,19 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { db, isQuotaError } from '../firebase';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { useGlobalState } from '../contexts/GlobalStateContext';
 import { Search, ChevronRight, LayoutGrid, CheckCircle2, XCircle } from 'lucide-react';
-import { FALLBACK_SECTIONS } from '../constants/sections';
 
 export default function Sections() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [sections, setSections] = useState<any[]>(FALLBACK_SECTIONS);
-  const [assignedSectionIds, setAssignedSectionIds] = useState<Set<string>>(new Set());
+  const { sections, registrations } = useGlobalState();
 
-  useEffect(() => {
-    // Listen to sections
-    const qSections = query(collection(db, 'sections'), orderBy('order', 'asc'));
-    const unsubSections = onSnapshot(qSections, (snap) => {
-      if (!snap.empty) {
-        setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        console.error("Error fetching sections:", error);
-      }
+  const assignedSectionIds = useMemo(() => {
+    const ids = new Set<string>();
+    registrations.forEach(reg => {
+      if (reg.sectionId) ids.add(reg.sectionId);
     });
-
-    // Listen to registrations to know which sections are assigned
-    const unsubRegs = onSnapshot(collection(db, 'registrations'), (snap) => {
-      const assignedIds = new Set<string>();
-      snap.docs.forEach(doc => {
-        const data = doc.data();
-        if (data.sectionId) {
-          assignedIds.add(data.sectionId);
-        }
-      });
-      setAssignedSectionIds(assignedIds);
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        console.error("Error fetching registrations for status:", error);
-      }
-    });
-
-    return () => {
-      unsubSections();
-      unsubRegs();
-    };
-  }, []);
+    return ids;
+  }, [registrations]);
 
   const filteredSections = sections.filter(section => 
     String(section.name || '').toLowerCase().includes(searchTerm.toLowerCase())

@@ -1,12 +1,29 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword
+} from 'firebase/auth';
 import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
+export { firebaseConfig }; // Export config for secondary instances
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const googleProvider = new GoogleAuthProvider();
+
+export { 
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  signInWithPopup
+};
 
 // Error handling helper
 export enum OperationType {
@@ -30,20 +47,7 @@ export interface FirestoreErrorInfo {
   }
 }
 
-export function isQuotaError(error: any) {
-  return (
-    error?.code === 'resource-exhausted' || 
-    error?.message?.includes('Quota exceeded') ||
-    error?.message?.includes('INTERNAL ASSERTION FAILED')
-  );
-}
-
-export function handleFirestoreError(error: any, operationType: OperationType, path: string | null) {
-  // Ignore quota errors and internal assertion failures to prevent console flooding
-  if (isQuotaError(error)) {
-    return;
-  }
-
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {

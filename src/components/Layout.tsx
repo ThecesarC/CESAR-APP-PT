@@ -3,7 +3,7 @@ import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Targ
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { doc, onSnapshot, collection, getDocs, getCountFromServer, getDocsFromServer } from 'firebase/firestore';
+import { useGlobalState } from '../contexts/GlobalStateContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -20,96 +20,30 @@ const ICON_MAP: Record<string, any> = {
 export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { settings, registrationCount, refreshCount } = useGlobalState();
+  
   const [appIcon, setAppIcon] = React.useState('Shield');
   const [logoUrl, setLogoUrl] = React.useState('https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg');
   const [mapUrl, setMapUrl] = React.useState('https://i.postimg.cc/0j64X30q/MAPA-HUGO-RANGEL.jpg');
   const [mapEmbedUrl, setMapEmbedUrl] = React.useState('https://www.google.com/maps/d/embed?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ');
-  const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'sections', 'admin']);
+  const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'admin']);
   const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
-  const [registrationCount, setRegistrationCount] = React.useState(0);
   const TOTAL_SECTIONS = 188;
 
   React.useEffect(() => {
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
-
-  React.useEffect(() => {
-    // Initial fetch using getCountFromServer for better reliability
-    const fetchInitialCount = async () => {
-      try {
-        const coll = collection(db, 'registrations');
-        const snapshot = await getCountFromServer(coll);
-        setRegistrationCount(snapshot.data().count);
-      } catch (error: any) {
-        if (!isQuotaError(error)) {
-          console.error("Initial count fetch error:", error);
-        }
-        // Fallback to getDocs if getCountFromServer fails
-        try {
-          const snapshot = await getDocs(collection(db, 'registrations'));
-          setRegistrationCount(snapshot.size);
-        } catch (e: any) {
-          if (!isQuotaError(e)) {
-            console.error("Fallback fetch error:", e);
-          }
-        }
-      }
-    };
-    
-    fetchInitialCount();
-
-    const unsubRegistrations = onSnapshot(collection(db, 'registrations'), (snapshot) => {
-      setRegistrationCount(snapshot.size);
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        console.error("Registrations count error:", error);
-      }
-    });
-
-    return () => unsubRegistrations();
-  }, []);
-
-  React.useEffect(() => {
-    if (registrationCount === 0) {
-      const timer = setTimeout(async () => {
-        try {
-          const coll = collection(db, 'registrations');
-          const snapshot = await getCountFromServer(coll);
-          if (snapshot.data().count > 0) {
-            setRegistrationCount(snapshot.data().count);
-          }
-        } catch (e: any) {
-          if (!isQuotaError(e)) {
-            console.error("Layout retry error:", e);
-          }
-        }
-      }, 4000);
-      return () => clearTimeout(timer);
+    if (settings) {
+      if (settings.appIcon) setAppIcon(settings.appIcon);
+      if (settings.logoUrl) setLogoUrl(settings.logoUrl);
+      if (settings.mapUrl) setMapUrl(settings.mapUrl);
+      if (settings.mapEmbedUrl) setMapEmbedUrl(settings.mapEmbedUrl);
+      if (settings.sidebarOrder) setSidebarOrder(settings.sidebarOrder.filter((o: string) => o !== 'sections'));
+      if (settings.headerLayout) setHeaderLayout(settings.headerLayout);
     }
-  }, [registrationCount]);
+  }, [settings]);
 
   const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
-
-  React.useEffect(() => {
-    const unsub = onSnapshot(doc(db, 'settings', 'global'), (d) => {
-      if (d.exists()) {
-        const data = d.data();
-        if (data.appIcon) setAppIcon(data.appIcon);
-        if (data.logoUrl) setLogoUrl(data.logoUrl);
-        if (data.mapUrl) setMapUrl(data.mapUrl);
-        if (data.mapEmbedUrl) setMapEmbedUrl(data.mapEmbedUrl);
-        if (data.sidebarOrder) setSidebarOrder(data.sidebarOrder);
-        if (data.headerLayout) setHeaderLayout(data.headerLayout);
-      }
-    }, (error) => {
-      if (error.code !== 'resource-exhausted') {
-        console.error("Layout settings error:", error);
-      }
-    });
-    return () => unsub();
-  }, []);
 
   const AppIcon = ICON_MAP[appIcon] || Shield;
 
@@ -130,7 +64,6 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
 
   const navItems = [
     { name: 'Panel de Registro', path: '/', icon: LayoutDashboard },
-    { name: 'Secciones', path: '/sections', icon: List },
   ];
 
   if (isAdmin) {
@@ -290,10 +223,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                       onClick={async () => {
                         const toastId = toast.loading('Sincronizando...');
                         try {
-                          const coll = collection(db, 'registrations');
-                          // Use getDocsFromServer for Chrome
-                          const snapshot = await getDocsFromServer(coll);
-                          setRegistrationCount(snapshot.size);
+                          await refreshCount();
                           toast.success('Avance actualizado', { id: toastId });
                         } catch (e) {
                           console.error("Mobile refresh error:", e);
@@ -358,7 +288,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               </div>
 
               {mapEmbedUrl && (
-                <div className="mt-6 px-2 flex-1 flex flex-col min-h-[350px]">
+                <div className="mt-6 px-2 flex-none flex flex-col h-[400px]">
                   <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
                     <iframe 
                       src={mapEmbedUrl} 
@@ -370,7 +300,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                     href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 flex-none flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                    className="mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
                   >
                     <MapPin className="w-3 h-3" />
                     Abrir Mapa Completo
@@ -403,9 +333,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 <button 
                   onClick={async () => {
                     try {
-                      const coll = collection(db, 'registrations');
-                      const snapshot = await getDocsFromServer(coll);
-                      setRegistrationCount(snapshot.size);
+                      await refreshCount();
                     } catch (e) {
                       console.error("Sidebar refresh error:", e);
                     }
@@ -460,7 +388,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
           })}
 
           {mapEmbedUrl && (
-            <div className="mt-4 mb-4 px-2 flex-1 flex flex-col min-h-[300px]">
+            <div className="mt-4 mb-4 px-2 flex-none flex flex-col h-[350px]">
               <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
                 <iframe 
                   src={mapEmbedUrl} 
@@ -472,7 +400,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                 href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-2 flex-none flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                className="mt-2 flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
               >
                 <MapPin className="w-3 h-3" />
                 Abrir Mapa Completo

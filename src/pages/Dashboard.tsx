@@ -1,126 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { db, handleFirestoreError, OperationType, isQuotaError } from '../firebase';
-import { collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, limit, where, getDocs, doc, getCountFromServer, getDocsFromServer } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { collection, addDoc, serverTimestamp, query, where, getDocs, limit } from 'firebase/firestore';
+import { useGlobalState } from '../contexts/GlobalStateContext';
 import { toast } from 'sonner';
 import { UserPlus, History, User as UserIcon, MapPin, Phone, Camera, X, Rocket } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion } from 'framer-motion';
-import { FALLBACK_SECTIONS } from '../constants/sections';
 
 export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boolean }) {
+  const { settings, sections, registrations, userProfile, registrationCount, refreshCount } = useGlobalState();
   const [personName, setPersonName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [ineFront, setIneFront] = useState<string | null>(null);
   const [ineBack, setIneBack] = useState<string | null>(null);
   const [sectionId, setSectionId] = useState('');
+  const [casilla, setCasilla] = useState('');
   const [loading, setLoading] = useState(false);
-  const [recentRegistrations, setRecentRegistrations] = useState<any[]>([]);
-  const [sections, setSections] = useState<any[]>(FALLBACK_SECTIONS);
   const [dashboardOrder, setDashboardOrder] = useState(['welcome', 'form', 'activity']);
-  const [registrationCount, setRegistrationCount] = useState(0);
   const TOTAL_SECTIONS = 188;
 
-  useEffect(() => {
-    // Initial fetch using getCountFromServer
-    const fetchInitialCount = async () => {
-      try {
-        const coll = collection(db, 'registrations');
-        const snapshot = await getCountFromServer(coll);
-        setRegistrationCount(snapshot.data().count);
-      } catch (e: any) {
-        if (!isQuotaError(e)) {
-          console.error("Dashboard initial count error:", e);
-        }
-        // Fallback
-        try {
-          const snap = await getDocs(collection(db, 'registrations'));
-          setRegistrationCount(snap.size);
-        } catch (err: any) {
-          if (!isQuotaError(err)) {
-            console.error("Dashboard fallback error:", err);
-          }
-        }
-      }
-    };
-    fetchInitialCount();
+  // Filter sections based on assignments - Relying on assignedSections array for strict ownership
+  const availableSections = isAdmin 
+    ? sections 
+    : sections.filter(s => (userProfile?.assignedSections || []).includes(s.id));
 
-    // Fetch Global Settings for dashboard order
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (d) => {
-      if (d.exists() && d.data().dashboardOrder) {
-        setDashboardOrder(d.data().dashboardOrder);
-      }
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        console.error("Dashboard settings error:", error);
-      }
-    });
-
-    // Fetch Sections for dropdown
-    const qSections = query(collection(db, 'sections'), orderBy('order', 'asc'));
-    const unsubSections = onSnapshot(qSections, (snap) => {
-      if (!snap.empty) {
-        setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      }
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        handleFirestoreError(error, OperationType.LIST, 'sections');
-      }
-    });
-
-    const q = query(
-      collection(db, 'registrations'),
-      orderBy('createdAt', 'desc'),
-      limit(5)
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const regs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setRecentRegistrations(regs);
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        handleFirestoreError(error, OperationType.LIST, 'registrations');
-      }
-    });
-
-    const unsubCount = onSnapshot(collection(db, 'registrations'), (snap) => {
-      setRegistrationCount(snap.size);
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        console.error("Dashboard count snapshot error:", error);
-      }
-    });
-
-    return () => {
-      unsubSettings();
-      unsubSections();
-      unsubscribe();
-      unsubCount();
-    };
-  }, []);
+  // Get casillas for selected section
+  const selectedSection = sections.find(s => s.id === sectionId);
+  const availableCasillas = selectedSection?.casillas || [];
 
   useEffect(() => {
-    if (registrationCount === 0) {
-      const timer = setTimeout(async () => {
-        try {
-          const coll = collection(db, 'registrations');
-          const snapshot = await getCountFromServer(coll);
-          if (snapshot.data().count > 0) {
-            setRegistrationCount(snapshot.data().count);
-          }
-        } catch (e: any) {
-          if (!isQuotaError(e)) {
-            console.error("Retry fetch error:", e);
-          }
-        }
-      }, 3000);
-      return () => clearTimeout(timer);
+    if (settings?.dashboardOrder) {
+      setDashboardOrder(settings.dashboardOrder);
     }
-  }, [registrationCount]);
+  }, [settings]);
 
+  const recentRegistrations = registrations.slice(0, 5);
   const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
@@ -162,7 +77,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!personName || !sectionId || !phoneNumber) {
+    if (!personName || !sectionId || !phoneNumber || !casilla) {
       toast.error('Por favor completa los campos obligatorios');
       return;
     }
@@ -199,6 +114,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
         ineBackUrl: ineBack,
         sectionId,
         sectionName: section?.name || 'Desconocida',
+        casilla,
         responsibleId: user.uid,
         responsibleEmail: user.email,
         createdAt: serverTimestamp()
@@ -210,13 +126,10 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       setIneFront(null);
       setIneBack(null);
       setSectionId('');
-    } catch (error: any) {
-      if (error?.code !== 'resource-exhausted') {
-        handleFirestoreError(error, OperationType.CREATE, 'registrations');
-        toast.error('Error al guardar el registro');
-      } else {
-        toast.error('Límite de cuota excedido. Intenta más tarde.');
-      }
+      setCasilla('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'registrations');
+      toast.error('Error al guardar el registro');
     } finally {
       setLoading(false);
     }
@@ -241,20 +154,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                       <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">Avance del Territorio</span>
                       <button 
                         onClick={() => {
-                          const fetchInitialCount = async () => {
-                            try {
-                              const coll = collection(db, 'registrations');
-                              const snapshot = await getCountFromServer(coll);
-                              setRegistrationCount(snapshot.data().count);
-                              toast.success('Avance actualizado');
-                            } catch (e: any) {
-                              if (!isQuotaError(e)) {
-                                console.error("Manual refresh error:", e);
-                              }
-                              toast.error('Error al actualizar');
-                            }
-                          };
-                          fetchInitialCount();
+                          refreshCount().then(() => toast.success('Avance actualizado'));
                         }}
                         className="p-1 hover:bg-neutral-100 rounded-full transition-colors"
                         title="Recargar avance"
@@ -274,16 +174,11 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                         onClick={async () => {
                           const toastId = toast.loading('Sincronización forzada (Chrome Fix)...');
                           try {
-                            const coll = collection(db, 'registrations');
-                            // getDocsFromServer bypasses any local cache/IndexedDB
-                            const snapshot = await getDocsFromServer(coll);
-                            setRegistrationCount(snapshot.size);
+                            await refreshCount();
                             toast.success('Sincronización completa', { id: toastId });
-                          } catch (e: any) {
-                            if (e?.code !== 'resource-exhausted') {
-                              console.error("Sync error:", e);
-                            }
-                            toast.error('Error de conexión. Verifica que Chrome no esté bloqueando cookies de terceros.', { id: toastId });
+                          } catch (e) {
+                            console.error("Sync error:", e);
+                            toast.error('Error de conexión.', { id: toastId });
                           }
                         }}
                         className="text-[9px] font-bold text-indigo-600 hover:text-indigo-700 underline text-left"
@@ -320,7 +215,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                   <div>
                     <label className="block text-sm font-semibold text-neutral-700 mb-2">
                       Nombre de la Persona <span className="text-red-500">*</span>
@@ -355,14 +250,37 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                     </label>
                     <select
                       value={sectionId}
-                      onChange={(e) => setSectionId(e.target.value)}
+                      onChange={(e) => {
+                        setSectionId(e.target.value);
+                        setCasilla(''); // Reset casilla when section changes
+                      }}
                       required
-                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-white"
+                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-white font-medium"
                     >
-                      <option value="">Selecciona una sección</option>
-                      {sections.map((section) => (
+                      <option value="">Selecciona sección</option>
+                      {availableSections.map((section) => (
                         <option key={section.id} value={section.id}>
                           {section.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-2">
+                      Casilla <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={casilla}
+                      onChange={(e) => setCasilla(e.target.value)}
+                      required
+                      disabled={!sectionId}
+                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none bg-white font-medium disabled:bg-neutral-50 disabled:text-neutral-400"
+                    >
+                      <option value="">Selecciona casilla</option>
+                      {availableCasillas.map((c: string) => (
+                        <option key={c} value={c}>
+                          {c}
                         </option>
                       ))}
                     </select>
@@ -462,7 +380,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                       </div>
                       <div className="flex items-center gap-2 text-sm text-neutral-600">
                         <MapPin className="w-4 h-4 text-indigo-500" />
-                        <span>{reg.sectionName}</span>
+                        <span>Sección {reg.sectionName} - {reg.casilla}</span>
                       </div>
                       <div className="pt-2 border-t border-neutral-200 flex items-center justify-between">
                         <span className="text-xs text-neutral-500">Por:</span>

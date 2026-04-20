@@ -5,10 +5,11 @@
 
 import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { auth, db, isQuotaError } from './firebase';
+import { onAuthStateChanged, User, signOut } from 'firebase/auth';
+import { auth, db } from './firebase';
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { Toaster } from 'sonner';
+import { GlobalStateProvider } from './contexts/GlobalStateContext';
 
 // Pages
 import Login from './pages/Login';
@@ -25,12 +26,34 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let unsubUser: (() => void) | undefined;
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubUser) {
+        unsubUser();
+        unsubUser = undefined;
+      }
+
       if (firebaseUser) {
+        // Restriction: Only allow specific admins for Google sign-in
+        const ALLOWED_ADMINS = ['hugocesarlemuscortes@gmail.com', 'bunkerhrv@gmail.com'];
+        const isGoogleProvider = firebaseUser.providerData.some(p => p.providerId === 'google.com');
+        const isAdminEmail = ALLOWED_ADMINS.includes(firebaseUser.email || '');
+
+        if (isGoogleProvider && !isAdminEmail) {
+          console.error(`Access denied for ${firebaseUser.email}: Google login is restricted to admin only.`);
+          signOut(auth).then(() => {
+            setLoading(false);
+            setUser(null);
+            setUserData(null);
+          });
+          return;
+        }
+
         const userRef = doc(db, 'users', firebaseUser.uid);
         
         // Use onSnapshot for real-time role updates
-        const unsubUser = onSnapshot(userRef, async (snap) => {
+        unsubUser = onSnapshot(userRef, async (snap) => {
           try {
             if (snap.exists()) {
               setUserData(snap.data());
@@ -47,34 +70,30 @@ export default function App() {
             setUser(firebaseUser);
           } catch (error) {
             console.error("Error syncing user data:", error);
-            setUser(firebaseUser);
+            setUser(firebaseUser); // Still allow login even if Firestore sync fails
           } finally {
             setLoading(false);
           }
         }, (error) => {
-          if (!isQuotaError(error)) {
-            console.error("User snapshot error:", error);
-          }
-          // Fallback user data if quota is hit
-          setUserData({
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            role: firebaseUser.email === 'hugocesarlemuscortes@gmail.com' ? 'admin' : 'user'
-          });
+          console.error("User snapshot error:", error);
           setUser(firebaseUser);
           setLoading(false);
         });
-
-        return () => unsubUser();
       } else {
+        if (unsubUser) {
+          unsubUser();
+          unsubUser = null;
+        }
         setUser(null);
         setUserData(null);
         setLoading(false);
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (unsubUser) unsubUser();
+    };
   }, []);
 
   const isAdmin = userData?.role === 'admin' || user?.email === 'hugocesarlemuscortes@gmail.com';
@@ -88,10 +107,11 @@ export default function App() {
   }
 
   return (
-    <ThemeProvider>
-      <BrowserRouter>
-        <Toaster position="top-right" richColors />
-        <Routes>
+    <GlobalStateProvider>
+      <ThemeProvider>
+        <BrowserRouter>
+          <Toaster position="top-right" richColors />
+          <Routes>
           <Route 
             path="/login" 
             element={user ? <Navigate to="/" /> : <Login />} 
@@ -103,32 +123,6 @@ export default function App() {
               user ? (
                 <Layout user={user} isAdmin={isAdmin}>
                   <Dashboard user={user} isAdmin={isAdmin} />
-                </Layout>
-              ) : (
-                <Navigate to="/login" />
-              )
-            } 
-          />
-
-          <Route 
-            path="/sections" 
-            element={
-              user ? (
-                <Layout user={user} isAdmin={isAdmin}>
-                  <Sections />
-                </Layout>
-              ) : (
-                <Navigate to="/login" />
-              )
-            } 
-          />
-
-          <Route 
-            path="/sections/:sectionId" 
-            element={
-              user ? (
-                <Layout user={user} isAdmin={isAdmin}>
-                  <SectionDetail />
                 </Layout>
               ) : (
                 <Navigate to="/login" />
@@ -153,5 +147,6 @@ export default function App() {
         </Routes>
       </BrowserRouter>
     </ThemeProvider>
+    </GlobalStateProvider>
   );
 }

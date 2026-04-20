@@ -11,11 +11,12 @@
         "ineBackUrl": { "type": "string", "description": "URL de la foto reverso de la INE" },
         "sectionId": { "type": "string" },
         "sectionName": { "type": "string" },
+        "casilla": { "type": "string", "description": "Casilla seleccionada para este registro" },
         "responsibleId": { "type": "string" },
         "responsibleEmail": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["personName", "phoneNumber", "ineFrontUrl", "ineBackUrl", "sectionId", "responsibleId", "createdAt"]
+      "required": ["personName", "phoneNumber", "ineFrontUrl", "ineBackUrl", "sectionId", "casilla", "responsibleId", "createdAt"]
     },
     "User": {
       "title": "User",
@@ -25,7 +26,12 @@
         "email": { "type": "string" },
         "displayName": { "type": "string" },
         "photoURL": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "user"] }
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "assignedSections": { 
+          "type": "array", 
+          "items": { "type": "string" },
+          "description": "IDs de las secciones asignadas a este usuario"
+        }
       },
       "required": ["email"]
     },
@@ -37,6 +43,11 @@
         "name": { "type": "string" },
         "description": { "type": "string" },
         "order": { "type": "number" },
+        "casillas": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Lista de casillas disponibles para esta sección"
+        },
         "files": {
           "type": "array",
           "items": {

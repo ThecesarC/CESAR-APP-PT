@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db, handleFirestoreError, OperationType, isQuotaError } from '../firebase';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { useGlobalState } from '../contexts/GlobalStateContext';
+import { initializeApp } from 'firebase/app';
+import { firebaseConfig } from '../firebase';
+import { getAuth as getSecondaryAuth, createUserWithEmailAndPassword as createSecondaryUser, signOut as signSecondaryOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { 
-  collection, doc, getDocs, updateDoc, setDoc, deleteDoc, 
-  query, orderBy, onSnapshot, writeBatch, addDoc as fireAddDoc
+  collection, doc, updateDoc, setDoc, deleteDoc, 
+  query, orderBy, onSnapshot, writeBatch, addDoc as fireAddDoc, getDoc
 } from 'firebase/firestore';
 import { AnimatePresence, motion, Reorder } from 'framer-motion';
 import { 
@@ -11,7 +15,7 @@ import {
   Plus, Trash2, Save, ChevronRight, X, GripVertical,
   FileText, FileSpreadsheet, Image as ImageIcon, Video, Link as LinkIcon,
   Upload, Check, Heart, Star, Zap, Shield, Target, Rocket, Box, Activity,
-  Move, ArrowLeft, LayoutDashboard, List, Download, AlertTriangle
+  Move, ArrowLeft, LayoutDashboard, List, Download, AlertTriangle, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -292,6 +296,7 @@ function SectionEditor({ section, isSelected, onToggle }: { section: any, isSele
 
 export default function Admin() {
   const navigate = useNavigate();
+  const { settings, sections: contextSections, registrations: contextRegistrations } = useGlobalState();
   const [activeTab, setActiveTab] = useState('ui');
   const [sections, setSections] = useState<any[]>([]);
   const [layoutSections, setLayoutSections] = useState<any[]>([]);
@@ -304,6 +309,409 @@ export default function Admin() {
   const [showBulkRegDeleteConfirm, setShowBulkRegDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [regToDelete, setRegToDelete] = useState<string | null>(null);
+  const [isAddingUser, setIsAddingUser] = useState(false);
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [assigningSectionsUser, setAssigningSectionsUser] = useState<any>(null);
+  const [showUserSectionsWipeConfirm, setShowUserSectionsWipeConfirm] = useState(false);
+
+  const handleUpdateAssignedSections = async (userId: string, sectionIds: string[]) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), {
+        assignedSections: sectionIds
+      });
+      toast.success('Secciones actualizadas');
+    } catch (e) {
+      toast.error('Error al actualizar secciones');
+    }
+  };
+
+  const exportUserAssignments = () => {
+    if (users.length === 0) {
+      toast.error('No hay usuarios para exportar');
+      return;
+    }
+
+    try {
+      const exportData = users.map(u => {
+        const assignedNames = (u.assignedSections || [])
+          .map((id: string) => sections.find(s => s.id === id)?.name)
+          .filter(Boolean)
+          .join(', ');
+
+        return {
+          'Nombre': u.displayName || 'N/A',
+          'Usuario/Email': u.email || 'N/A',
+          'Perfil': u.role || 'user',
+          'Secciones Asignadas': assignedNames
+        };
+      });
+
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Asignaciones');
+      const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+      const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
+      saveAs(data, `Asignaciones_Usuarios_${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
+      toast.success('Exportación completada');
+    } catch (e) {
+      toast.error('Error al exportar asignaciones');
+    }
+  };
+
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const handleWipeSections = async () => {
+    const toastId = toast.loading('Borrando catálogo de secciones...');
+    try {
+      const batch = writeBatch(db);
+      sections.forEach(s => {
+        batch.delete(doc(db, 'sections', s.id));
+      });
+      await batch.commit();
+      
+      // Also clear assignments from users to maintain consistency
+      const userBatch = writeBatch(db);
+      users.forEach(u => {
+        if (u.assignedSections && u.assignedSections.length > 0) {
+          userBatch.update(doc(db, 'users', u.id), { assignedSections: [] });
+        }
+      });
+      await userBatch.commit();
+      
+      toast.success('Catálogo y asignaciones eliminadas completamente', { id: toastId });
+    } catch (e) {
+      toast.error('Error al borrar datos', { id: toastId });
+    }
+  };
+
+  const handleUserSectionsExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const XLSX = await import('xlsx');
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+        const batch = writeBatch(db);
+        let count = 0;
+        
+        data.forEach(row => {
+          const email = String(row.email || row.Email || row.EMAIL || '').toLowerCase().trim();
+          const seccionesRaw = String(row.secciones || row.Secciones || row.SECCIONES || '');
+          
+          if (email && seccionesRaw) {
+            const sectionNames = seccionesRaw.split(',').map(s => s.trim().toLowerCase());
+            const matchedIds = sections
+              .filter(s => sectionNames.includes(s.name.toLowerCase()))
+              .map(s => s.id);
+            
+            const targetUser = users.find(u => u.email.toLowerCase() === email);
+            if (targetUser && matchedIds.length > 0) {
+              batch.update(doc(db, 'users', targetUser.id), {
+                assignedSections: matchedIds
+              });
+              count++;
+            }
+          }
+        });
+
+        await batch.commit();
+        toast.success(`Secciones asignadas a ${count} usuarios`);
+      } catch (e) {
+        toast.error('Error al procesar asignaciones');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+  const [newUserRole, setNewUserRole] = useState('user');
+  const [isAddingUserSection, setIsAddingUserSection] = useState(false);
+  const [newUSectionName, setNewUSectionName] = useState('');
+  const [newUSectionCasillas, setNewUSectionCasillas] = useState('');
+  const [selectedUSections, setSelectedUSections] = useState<string[]>([]);
+
+  const handleAddManualSectionToUser = async (uid: string) => {
+    if (!newUSectionName) {
+      toast.error('Nombre de sección requerido');
+      return;
+    }
+    try {
+      const sectionRef = doc(collection(db, 'sections'));
+      const casillas = newUSectionCasillas.split(',').map(c => c.trim()).filter(c => c);
+      
+      const newSection = {
+        name: newUSectionName,
+        casillas: casillas,
+        assignedTo: uid,
+        createdAt: new Date(),
+        order: sections.length
+      };
+
+      await setDoc(sectionRef, newSection);
+      
+      // Update user's assignedSections array for backward compatibility/quick lookup
+      await updateDoc(doc(db, 'users', uid), {
+        assignedSections: [...(assigningSectionsUser.assignedSections || []), sectionRef.id]
+      });
+
+      // Update local state to show change immediately if needed
+      setAssigningSectionsUser((prev: any) => ({
+        ...prev,
+        assignedSections: [...(prev.assignedSections || []), sectionRef.id]
+      }));
+
+      setNewUSectionName('');
+      setNewUSectionCasillas('');
+      setIsAddingUserSection(false);
+      toast.success('Sección añadida');
+    } catch (e) {
+      toast.error('Error al añadir sección');
+    }
+  };
+
+  const handleUserImportExcelInsideModal = async (e: React.ChangeEvent<HTMLInputElement>, uid: string) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const XLSX = await import('xlsx');
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(ws) as any[];
+
+        if (data.length === 0) {
+          toast.error('El archivo está vacío');
+          return;
+        }
+
+        const batch = writeBatch(db);
+        const newIds: string[] = [];
+        
+        data.forEach((row, index) => {
+          const sectionRef = doc(collection(db, 'sections'));
+          const casillasRaw = row.casillas || row.Casillas || row.CASILLAS || '';
+          const casillas = typeof casillasRaw === 'string' 
+            ? casillasRaw.split(',').map(c => c.trim()).filter(c => c)
+            : (typeof casillasRaw === 'number' ? [String(casillasRaw)] : []);
+
+          batch.set(sectionRef, {
+            name: String(row.seccion || row.Seccion || row.SECCION || `Sección ${index + 1}`),
+            casillas: casillas,
+            assignedTo: uid,
+            order: sections.length + index,
+            createdAt: new Date()
+          });
+          newIds.push(sectionRef.id);
+        });
+
+        const currentAssigned = assigningSectionsUser.assignedSections || [];
+        batch.update(doc(db, 'users', uid), {
+          assignedSections: [...currentAssigned, ...newIds]
+        });
+
+        await batch.commit();
+        setAssigningSectionsUser((prev: any) => ({
+          ...prev,
+          assignedSections: [...(prev.assignedSections || []), ...newIds]
+        }));
+
+        toast.success(`${data.length} secciones añadidas al usuario`);
+      } catch (err) {
+        toast.error('Error al procesar el Excel');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  const handleExportSpecificUserSections = (user: any) => {
+    const userSections = sections.filter(s => (user.assignedSections || []).includes(s.id));
+    
+    if (userSections.length === 0) {
+      toast.error('No hay secciones para este usuario');
+      return;
+    }
+
+    const exportData = userSections.map(s => ({
+      'Sección': s.name,
+      'Casillas': (s.casillas || []).join(', ')
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Secciones');
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const dataBlob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8' });
+    saveAs(dataBlob, `Secciones_${user.displayName || 'Usuario'}_${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
+  };
+
+  const handleDeleteSection = async (sectionId: string, uid: string) => {
+    try {
+      await deleteDoc(doc(db, 'sections', sectionId));
+      
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const currentAssigned = userSnap.data().assignedSections || [];
+        const next = currentAssigned.filter((id: string) => id !== sectionId);
+        await updateDoc(userRef, { assignedSections: next });
+      }
+      
+      // Clear selection if deleted
+      setSelectedUSections(prev => prev.filter(id => id !== sectionId));
+      toast.success('Sección eliminada');
+    } catch (e) {
+      console.error(e);
+      toast.error('Error al eliminar');
+    }
+  };
+
+  const handleBulkDeleteUserSections = async (uid: string) => {
+    if (selectedUSections.length === 0) return;
+    const toastId = toast.loading('Eliminando secciones seleccionadas...');
+    try {
+      const batch = writeBatch(db);
+      selectedUSections.forEach(id => {
+        batch.delete(doc(db, 'sections', id));
+      });
+      
+      const userRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        const currentAssigned = userSnap.data().assignedSections || [];
+        const next = currentAssigned.filter((id: string) => !selectedUSections.includes(id));
+        batch.update(userRef, { assignedSections: next });
+      }
+
+      await batch.commit();
+      setSelectedUSections([]);
+      toast.success('Secciones eliminadas correctamente', { id: toastId });
+    } catch (e) {
+      console.error(e);
+      toast.error('Error al eliminar masivamente', { id: toastId });
+    }
+  };
+
+  const handleDeleteAllUserSections = async (uid: string) => {
+    const userInModal = users.find(u => u.id === uid);
+    if (!userInModal) return;
+
+    const userSections = sections.filter(s => (userInModal.assignedSections || []).includes(s.id));
+    if (userSections.length === 0) {
+      toast.error('No hay secciones para eliminar');
+      return;
+    }
+    
+    const toastId = toast.loading('Eliminando todas las secciones del usuario...');
+    try {
+      const batch = writeBatch(db);
+      userSections.forEach(s => {
+        batch.delete(doc(db, 'sections', s.id));
+      });
+      
+      batch.update(doc(db, 'users', uid), { assignedSections: [] });
+      
+      await batch.commit();
+      setSelectedUSections([]);
+      setShowUserSectionsWipeConfirm(false);
+      toast.success('Todas las secciones del usuario han sido eliminadas', { id: toastId });
+    } catch (e) {
+      console.error(e);
+      toast.error('Error al eliminar todas las secciones', { id: toastId });
+    }
+  };
+
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserEmail || !newUserPassword || !newUserName) {
+      toast.error('Completa todos los campos');
+      return;
+    }
+
+    setIsCreatingUser(true);
+    setSetupError(null);
+    const toastId = toast.loading('Creando cuenta de usuario...');
+
+    try {
+      // 1. Create a secondary app instance to create the user without affecting current admin session
+      const secondaryApp = initializeApp(firebaseConfig, `SecondaryApp_${Date.now()}`);
+      const secondaryAuth = getSecondaryAuth(secondaryApp);
+      
+      // 2. Format identifier (if they didn't provide email format)
+      const identifier = newUserEmail.includes('@') ? newUserEmail : `${newUserEmail}@app.local`;
+      
+      // 3. Create the user in Firebase Auth
+      let uid = '';
+      try {
+        const userCredential = await createSecondaryUser(secondaryAuth, identifier, newUserPassword);
+        uid = userCredential.user.uid;
+      } catch (authError: any) {
+        if (authError.code === 'auth/email-already-in-use') {
+          // Attempt to "Log in" to get the UID if the admin provided the correct password
+          try {
+            const loginCredential = await signInWithEmailAndPassword(secondaryAuth, identifier, newUserPassword);
+            uid = loginCredential.user.uid;
+            toast.info('El usuario ya existe en Auth. Sincronizando datos...', { id: toastId });
+          } catch (loginError: any) {
+            // Check for modern invalid-credential too
+            if (loginError.code === 'auth/wrong-password' || loginError.code === 'auth/invalid-credential') {
+               // Re-throw original "already in use" because password provided by admin was wrong
+               throw authError; 
+            }
+            throw loginError;
+          }
+        } else {
+          throw authError;
+        }
+      }
+
+      // 4. Create the user document in Firestore
+      await setDoc(doc(db, 'users', uid), {
+        displayName: newUserName,
+        email: identifier,
+        role: newUserRole,
+        createdAt: new Date(),
+        createdBy: settings.adminEmail || 'admin'
+      }, { merge: true });
+
+      // 5. Clean up secondary app
+      await signSecondaryOut(secondaryAuth);
+      
+      toast.success('Usuario creado correctamente', { id: toastId });
+      setIsAddingUser(false);
+      setNewUserName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('user');
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      let msg = 'Error al crear usuario';
+      if (error.code === 'auth/operation-not-allowed') {
+        setSetupError('email');
+        msg = 'Email/Password desactivado en Firebase.';
+      } else if (error.code === 'auth/email-already-in-use') {
+        msg = 'El nombre de usuario/email ya existe';
+      } else if (error.code === 'auth/weak-password') {
+        msg = 'La contraseña debe tener al menos 6 caracteres';
+      }
+      toast.error(msg, { id: toastId });
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
   const [uiSettings, setUiSettings] = useState({
     primaryColor: '#4f46e5',
     backgroundColor: '#f9fafb',
@@ -311,9 +719,9 @@ export default function Admin() {
     appIcon: 'Shield',
     logoUrl: 'https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg',
     dashboardOrder: ['welcome', 'form', 'activity'],
-    sidebarOrder: ['dashboard', 'sections', 'admin'],
+    sidebarOrder: ['dashboard', 'admin'],
     headerLayout: ['logo', 'title', 'user'],
-    loginOrder: ['icon', 'title', 'description', 'button', 'footer']
+    loginOrder: ['icon', 'title', 'description', 'form', 'google', 'footer']
   });
 
   const colorPalette = [
@@ -345,61 +753,39 @@ export default function Admin() {
   ];
 
   useEffect(() => {
-    // Fetch Sections
-    const qSections = query(collection(db, 'sections'), orderBy('order', 'asc'));
-    const unsubSections = onSnapshot(qSections, (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setSections(docs);
-      setLayoutSections(docs);
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        handleFirestoreError(error, OperationType.LIST, 'sections');
-      }
-    });
+    setSections(contextSections);
+    setLayoutSections(contextSections);
+  }, [contextSections]);
 
-    // Fetch Users
+  useEffect(() => {
+    if (contextRegistrations.length > 0) {
+      setRegistrations(contextRegistrations);
+    }
+  }, [contextRegistrations]);
+
+  useEffect(() => {
+    if (settings) {
+      setUiSettings(prev => ({ 
+        ...prev, 
+        ...settings,
+        dashboardOrder: settings.dashboardOrder || prev.dashboardOrder,
+        sidebarOrder: settings.sidebarOrder || prev.sidebarOrder,
+        headerLayout: settings.headerLayout || prev.headerLayout,
+        loginOrder: settings.loginOrder || prev.loginOrder
+      }));
+    }
+  }, [settings]);
+
+  useEffect(() => {
+    // Fetch Users (Keep this one here as it's admin-only and specific to this page)
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
       setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => {
-      if (!isQuotaError(error)) {
-        handleFirestoreError(error, OperationType.LIST, 'users');
-      }
-    });
-
-    // Fetch UI Settings
-    const unsubSettings = onSnapshot(doc(db, 'settings', 'global'), (d) => {
-      if (d.exists()) {
-        const data = d.data();
-        setUiSettings(prev => ({ 
-          ...prev, 
-          ...data,
-          dashboardOrder: data.dashboardOrder || prev.dashboardOrder,
-          sidebarOrder: data.sidebarOrder || prev.sidebarOrder,
-          headerLayout: data.headerLayout || prev.headerLayout,
-          loginOrder: data.loginOrder || prev.loginOrder
-        }));
-      }
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        handleFirestoreError(error, OperationType.GET, 'settings/global');
-      }
-    });
-
-    // Fetch All Registrations for Excel Export
-    const qRegs = query(collection(db, 'registrations'), orderBy('createdAt', 'desc'));
-    const unsubRegs = onSnapshot(qRegs, (snap) => {
-      setRegistrations(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    }, (error) => {
-      if (!isQuotaError(error)) {
-        handleFirestoreError(error, OperationType.LIST, 'registrations');
-      }
+      handleFirestoreError(error, OperationType.LIST, 'users');
     });
 
     return () => {
-      unsubSections();
       unsubUsers();
-      unsubSettings();
-      unsubRegs();
     };
   }, []);
 
@@ -462,6 +848,7 @@ export default function Admin() {
           'Persona Registrada': reg.personName || 'N/A',
           'Teléfono': reg.phoneNumber || 'N/A',
           'Sección': reg.sectionName || 'N/A',
+          'Casilla': reg.casilla || 'N/A',
           'INE Frontal (URL/Base64)': reg.ineFrontUrl && reg.ineFrontUrl.length > 32000 
             ? 'Imagen demasiado grande para Excel (Ver en sistema)' 
             : (reg.ineFrontUrl || 'N/A'),
@@ -611,18 +998,22 @@ export default function Admin() {
 
   const [isAddingSection, setIsAddingSection] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
+  const [newSectionCasillas, setNewSectionCasillas] = useState('');
 
   const handleAddSection = async () => {
     if (!newSectionName) return;
+    const casillas = newSectionCasillas.split(',').map(c => c.trim()).filter(c => c);
     try {
       await fireAddDoc(collection(db, 'sections'), {
         name: newSectionName,
         description: '',
         order: sections.length,
-        files: []
+        files: [],
+        casillas: casillas
       });
       toast.success('Sección añadida');
       setNewSectionName('');
+      setNewSectionCasillas('');
       setIsAddingSection(false);
     } catch (e) {
       toast.error('Error al añadir');
@@ -705,11 +1096,17 @@ export default function Admin() {
         const batch = writeBatch(db);
         data.forEach((row, index) => {
           const sectionRef = doc(collection(db, 'sections'));
+          const casillasRaw = row.casillas || row.Casillas || row.CASILLAS || '';
+          const casillas = typeof casillasRaw === 'string' 
+            ? casillasRaw.split(',').map(c => c.trim()).filter(c => c)
+            : (typeof casillasRaw === 'number' ? [String(casillasRaw)] : []);
+
           batch.set(sectionRef, {
             name: String(row.seccion || row.Seccion || row.SECCION || `Sección ${sections.length + index + 1}`),
             description: '',
             order: sections.length + index,
-            files: []
+            files: [],
+            casillas: casillas
           });
         });
 
@@ -744,7 +1141,6 @@ export default function Admin() {
           {[
             { id: 'ui', icon: Palette, label: 'Diseño' },
             { id: 'layout', icon: Move, label: 'Vista Previa' },
-            { id: 'sections', icon: LayoutGrid, label: 'Secciones' },
             { id: 'users', icon: Users, label: 'Usuarios' },
             { id: 'history', icon: FileSpreadsheet, label: 'Registros' }
           ].map(tab => (
@@ -958,7 +1354,8 @@ export default function Admin() {
                             {item === 'icon' && 'Icono de Seguridad'}
                             {item === 'title' && 'Título de Bienvenida'}
                             {item === 'description' && 'Descripción/Instrucciones'}
-                            {item === 'button' && 'Botón de Google'}
+                            {item === 'form' && 'Formulario de Email'}
+                            {item === 'google' && 'Acceso Google (Admin)'}
                             {item === 'footer' && 'Pie de Página'}
                           </div>
                         </Reorder.Item>
@@ -1202,166 +1599,237 @@ export default function Admin() {
         )}
 
         {activeTab === 'users' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-neutral-50 border-b border-neutral-200">
-                  <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Usuario</th>
-                  <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Rol</th>
-                  <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-100">
-                {users.map(u => (
-                  <tr key={u.id} className="hover:bg-neutral-50 transition-colors">
-                    <td className="px-6 py-4 flex items-center gap-3">
-                      <img src={u.photoURL} alt="" className="w-8 h-8 rounded-full border border-neutral-200" />
-                      <span className="font-medium text-neutral-900">{u.displayName}</span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-neutral-600">{u.email}</td>
-                    <td className="px-6 py-4">
-                      <select 
-                        value={u.role || 'user'}
-                        onChange={e => updateUserRole(u.id, e.target.value)}
-                        className="text-sm border-none bg-transparent font-medium text-indigo-600 focus:ring-0 cursor-pointer"
-                      >
-                        <option value="user">Usuario</option>
-                        <option value="admin">Administrador</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button 
-                        onClick={() => setUserToDelete(u.id)}
-                        className="p-2 text-neutral-400 hover:text-red-600 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-8 space-y-6"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-3xl border border-neutral-100 shadow-sm">
+              <div>
+                <h2 className="text-2xl font-bold text-neutral-900">Gestión de Usuarios</h2>
+                <p className="text-neutral-500 text-sm">Controla el personal y haz clic en un usuario para administrar sus secciones.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button 
+                  onClick={exportUserAssignments}
+                  className="bg-neutral-100 text-neutral-600 px-4 py-3 rounded-xl font-bold hover:bg-neutral-200 transition-all text-[10px] uppercase tracking-widest flex items-center gap-2 border border-neutral-200"
+                >
+                  <Download className="w-4 h-4" />
+                  Reporte General
+                </button>
+                <button 
+                  onClick={() => setIsAddingUser(true)}
+                  className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
+                  Nuevo Usuario
+                </button>
+                <button 
+                  onClick={() => setShowWipeConfirm(true)}
+                  className="p-3 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all ml-2"
+                  title="Borrar todas las secciones y asignaciones"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <ConfirmModal 
+              isOpen={showWipeConfirm}
+              onClose={() => setShowWipeConfirm(false)}
+              onConfirm={handleWipeSections}
+              title="¿Borrar TODO el catálogo?"
+              message="Esta acción es irreversible. Se eliminarán todas las secciones actuales y se quitarán las asignaciones de todos los usuarios. ¿Estás seguro?"
+            />
+
+            {/* Add User Modal */}
+            <AnimatePresence>
+              {isAddingUser && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="bg-white rounded-3xl p-8 w-full max-w-lg shadow-2xl overflow-hidden"
+                  >
+                    <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-xl font-bold text-neutral-900">Configurar Nuevo Acceso</h3>
+                      <button onClick={() => setIsAddingUser(false)} className="p-2 text-neutral-400 hover:text-neutral-600 rounded-full hover:bg-neutral-50">
+                        <X className="w-5 h-5" />
                       </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+
+                    {setupError === 'email' && (
+                      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                        <div className="flex items-center gap-2 mb-2 text-amber-700">
+                          <ShieldCheck className="w-4 h-4" />
+                          <h4 className="font-bold text-[10px] uppercase tracking-widest">Configuración Necesaria</h4>
+                        </div>
+                        <p className="text-[10px] text-amber-800 leading-relaxed mb-3">
+                          Para crear usuarios manuales, debes habilitar el proveedor <b>Email/Password</b> en tu consola.
+                        </p>
+                        <a 
+                          href="https://console.firebase.google.com/project/gen-lang-client-0108077873/authentication/providers"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-block px-4 py-2 bg-amber-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-amber-700 transition-all"
+                        >
+                          Ir a la Consola
+                        </a>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleCreateUser} className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Nombre Completo</label>
+                        <input 
+                          required
+                          placeholder="Ej. Juan Pérez"
+                          value={newUserName}
+                          onChange={e => setNewUserName(e.target.value)}
+                          className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all font-medium"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Usuario (o Email)</label>
+                        <input 
+                          required
+                          placeholder="nombre_usuario"
+                          value={newUserEmail}
+                          onChange={e => setNewUserEmail(e.target.value)}
+                          className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all font-medium"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Contraseña Asignada</label>
+                        <input 
+                          required
+                          type="password"
+                          placeholder="Mínimo 6 caracteres"
+                          value={newUserPassword}
+                          onChange={e => setNewUserPassword(e.target.value)}
+                          className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all font-medium"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Nivel de Acceso (Perfil)</label>
+                        <div className="grid grid-cols-2 gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setNewUserRole('user')}
+                            className={`py-3 px-4 rounded-xl border-2 font-bold transition-all ${
+                              newUserRole === 'user' 
+                              ? 'border-indigo-600 bg-indigo-50 text-indigo-600' 
+                              : 'border-neutral-100 bg-neutral-50 text-neutral-400 hover:border-neutral-200'
+                            }`}
+                          >
+                            Usuario
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewUserRole('admin')}
+                            className={`py-3 px-4 rounded-xl border-2 font-bold transition-all ${
+                              newUserRole === 'admin' 
+                              ? 'border-red-600 bg-red-50 text-red-600' 
+                              : 'border-neutral-100 bg-neutral-50 text-neutral-400 hover:border-neutral-200'
+                            }`}
+                          >
+                            Administrador
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="pt-6">
+                        <button 
+                          type="submit"
+                          disabled={isCreatingUser}
+                          className="w-full py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl active:scale-[0.98] disabled:opacity-50"
+                        >
+                          {isCreatingUser ? 'Procesando...' : 'Crear y Guardar Credenciales'}
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                </div>
+              )}
+            </AnimatePresence>
+
+            <div className="bg-white rounded-[2rem] border border-neutral-100 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-neutral-50 border-b border-neutral-100">
+                      <th className="px-6 py-4 text-[10px] uppercase font-black text-neutral-400 tracking-widest">Información de Usuario</th>
+                      <th className="px-6 py-4 text-[10px] uppercase font-black text-neutral-400 tracking-widest">Usuario / Identificador</th>
+                      <th className="px-6 py-4 text-[10px] uppercase font-black text-neutral-400 tracking-widest">Secciones Asignadas</th>
+                      <th className="px-6 py-4 text-[10px] uppercase font-black text-neutral-400 tracking-widest text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-50">
+                    {users.map((user) => (
+                      <tr key={user.id} className="hover:bg-neutral-50/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <div 
+                            className="flex items-center gap-3 cursor-pointer group"
+                            onClick={() => setAssigningSectionsUser(user)}
+                          >
+                            {user.photoURL ? (
+                              <img src={user.photoURL} className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                {user.displayName?.[0] || 'U'}
+                              </div>
+                            )}
+                            <div className="flex flex-col">
+                              <span className="font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors uppercase tracking-tight">{user.displayName || 'Sin nombre'}</span>
+                              <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">Gestionar Secciones</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 font-medium text-neutral-600">
+                          {user.email || 'N/A'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <button 
+                            onClick={() => setAssigningSectionsUser(user)}
+                            className="bg-indigo-50 text-indigo-600 px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-neutral-900 hover:text-white transition-all flex items-center gap-1.5"
+                          >
+                            <Box className="w-3.5 h-3.5" />
+                            {(() => {
+                              // Filter to only count sections that actually exist in the DB
+                              const actualSectionsCount = (user.assignedSections || []).filter((id: string) => 
+                                sections.some(s => s.id === id)
+                              ).length;
+                              return actualSectionsCount;
+                            })()} SECCIONES
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={() => setUserToDelete(user.id)}
+                            className="p-2.5 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
             <ConfirmModal 
               isOpen={!!userToDelete}
               onClose={() => setUserToDelete(null)}
               onConfirm={() => userToDelete && deleteUser(userToDelete)}
-              title="¿Eliminar usuario?"
-              message="¿Estás seguro de que deseas eliminar a este usuario? Perderá el acceso a la plataforma inmediatamente."
+              title="¿Eliminar perfil de usuario?"
+              message="¿Estás seguro de que deseas eliminar el registro de este usuario? (Nota: Su cuenta de acceso seguirá existiendo en Firebase Auth si fue creado manualmente, pero no tendrá acceso a este sistema)."
             />
-          </div>
-        )}
-
-        {activeTab === 'sections' && (
-          <div className="p-4 md:p-8 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-              <h3 className="text-lg font-bold text-neutral-900">Gestión de Secciones</h3>
-              <div className="flex flex-wrap gap-2">
-                <label className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-emerald-50 text-emerald-600 px-4 py-3 rounded-xl font-bold hover:bg-emerald-100 transition-all cursor-pointer text-sm">
-                  <Upload className="w-4 h-4" />
-                  Importar Excel
-                  <input 
-                    type="file" 
-                    accept=".xlsx, .xls, .csv" 
-                    className="hidden" 
-                    onChange={handleExcelImport}
-                  />
-                </label>
-                <button 
-                  onClick={() => setIsAddingSection(true)}
-                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-3 rounded-xl font-bold hover:bg-indigo-100 transition-all text-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  Nueva Sección
-                </button>
-              </div>
-            </div>
-
-            {sections.length > 0 && (
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-neutral-50 p-4 rounded-2xl border border-neutral-100 gap-4">
-                <div className="flex flex-wrap items-center gap-3 md:gap-4">
-                  <button 
-                    onClick={toggleSelectAll}
-                    className="flex items-center gap-2 text-sm font-bold text-neutral-600 hover:text-indigo-600 transition-colors whitespace-nowrap"
-                  >
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all flex-shrink-0 ${selectedSections.length === sections.length ? 'bg-indigo-600 border-indigo-600' : 'bg-white border-neutral-300'}`}>
-                      {selectedSections.length === sections.length && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
-                    </div>
-                    Seleccionar Todo
-                  </button>
-                  {selectedSections.length > 0 && (
-                    <span className="text-[10px] md:text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full whitespace-nowrap">
-                      {selectedSections.length} seleccionados
-                    </span>
-                  )}
-                </div>
-                {selectedSections.length > 0 && (
-                  <button 
-                    onClick={() => setShowBulkDeleteConfirm(true)}
-                    className="flex items-center justify-center gap-2 text-red-600 hover:bg-red-50 px-4 py-2.5 rounded-xl font-bold transition-all text-sm w-full sm:w-auto border border-transparent hover:border-red-100"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                    Eliminar Seleccionados
-                  </button>
-                )}
-              </div>
-            )}
-
-            <ConfirmModal 
-              isOpen={showBulkDeleteConfirm}
-              onClose={() => setShowBulkDeleteConfirm(false)}
-              onConfirm={deleteSelectedSections}
-              title="¿Seguro que desea eliminar esta selección?"
-              message={`Estás a punto de eliminar ${selectedSections.length} secciones. Esta acción es permanente y no se puede deshacer.`}
-            />
-
-            {isAddingSection && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl animate-in fade-in zoom-in duration-200">
-                  <h3 className="text-xl font-bold text-neutral-900 mb-4">Nueva Sección</h3>
-                  <p className="text-sm text-neutral-500 mb-6">Ingresa el número o nombre de la nueva sección.</p>
-                  
-                  <input 
-                    type="number"
-                    inputMode="numeric"
-                    placeholder="Ej. 1234"
-                    value={newSectionName}
-                    onChange={e => setNewSectionName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && handleAddSection()}
-                    autoFocus
-                    className="w-full px-6 py-4 rounded-2xl border-2 border-neutral-100 focus:border-indigo-600 outline-none text-2xl font-bold text-center transition-all mb-6"
-                  />
-
-                  <div className="flex gap-3">
-                    <button 
-                      onClick={() => setIsAddingSection(false)}
-                      className="flex-1 py-4 rounded-2xl font-bold text-neutral-500 hover:bg-neutral-50 transition-all"
-                    >
-                      Cancelar
-                    </button>
-                    <button 
-                      onClick={handleAddSection}
-                      className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-                    >
-                      Añadir
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-4">
-              {sections.map((s, idx) => (
-                <SectionEditor 
-                  key={s.id} 
-                  section={s} 
-                  isSelected={selectedSections.includes(s.id)}
-                  onToggle={toggleSectionSelection}
-                />
-              ))}
-            </div>
-          </div>
+          </motion.div>
         )}
 
         {activeTab === 'history' && (
@@ -1426,6 +1894,7 @@ export default function Admin() {
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Registrado por</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Persona / Teléfono</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Sección</th>
+                    <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Casilla</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider">Documentación</th>
                     <th className="px-6 py-4 text-xs font-bold text-neutral-500 uppercase tracking-wider text-right">Acciones</th>
                   </tr>
@@ -1461,6 +1930,11 @@ export default function Admin() {
                       <td className="px-6 py-4">
                         <span className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full text-xs font-bold">
                           {reg.sectionName}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium text-neutral-600">
+                          {reg.casilla || '-'}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -1516,6 +1990,180 @@ export default function Admin() {
             />
           </div>
         )}
+
+        <AnimatePresence>
+          {assigningSectionsUser && (() => {
+            const userInModal = users.find(u => u.id === assigningSectionsUser.id) || assigningSectionsUser;
+            return (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-white rounded-[2.5rem] p-8 w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+                >
+                  <div className="flex justify-between items-start mb-6">
+                    <div>
+                      <h3 className="text-2xl font-black text-neutral-900 tracking-tight">Administrar Secciones</h3>
+                      <p className="text-xs text-neutral-500 font-medium">Asignaciones para: <span className="text-indigo-600 font-bold">{userInModal.displayName}</span></p>
+                    </div>
+                    <button onClick={() => setAssigningSectionsUser(null)} className="p-2 text-neutral-400 hover:text-neutral-600 hover:bg-neutral-50 rounded-full transition-all">
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mb-6 p-4 bg-neutral-50 rounded-2xl border border-neutral-100">
+                    <button 
+                      onClick={() => setIsAddingUserSection(true)}
+                      className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-100"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Agregar Manual
+                    </button>
+                    <label className="flex items-center gap-2 bg-white text-neutral-700 border border-neutral-200 px-4 py-2.5 rounded-xl font-bold hover:bg-neutral-50 transition-all text-[10px] uppercase tracking-widest cursor-pointer">
+                      <Upload className="w-4 h-4" />
+                      Importar Excel
+                      <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => handleUserImportExcelInsideModal(e, userInModal.id)} />
+                    </label>
+                    <button 
+                      onClick={() => handleExportSpecificUserSections(userInModal)}
+                      className="flex items-center gap-2 bg-white text-neutral-700 border border-neutral-200 px-4 py-2.5 rounded-xl font-bold hover:bg-neutral-50 transition-all text-[10px] uppercase tracking-widest"
+                    >
+                      <Download className="w-4 h-4" />
+                      Exportar
+                    </button>
+                    <button 
+                      onClick={() => setShowUserSectionsWipeConfirm(true)}
+                      className="flex items-center gap-2 bg-red-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-red-700 transition-all text-[10px] uppercase tracking-widest shadow-lg shadow-red-100 ml-auto"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Eliminar Todas
+                    </button>
+                    {selectedUSections.length > 0 && (
+                      <button 
+                        onClick={() => handleBulkDeleteUserSections(userInModal.id)}
+                        className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2.5 rounded-xl font-bold hover:bg-red-100 transition-all text-[10px] uppercase tracking-widest"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        Borrar Seleccionadas ({selectedUSections.length})
+                      </button>
+                    )}
+                  </div>
+
+                  <ConfirmModal 
+                    isOpen={showUserSectionsWipeConfirm}
+                    onClose={() => setShowUserSectionsWipeConfirm(false)}
+                    onConfirm={() => handleDeleteAllUserSections(userInModal.id)}
+                    title="¿Borrar TODAS las secciones?"
+                    message={`¿Estás seguro de que deseas eliminar permanentemente todas las secciones asignadas a ${userInModal.displayName}? Esta acción no se puede deshacer.`}
+                  />
+
+                  {isAddingUserSection && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      className="mb-6 p-5 bg-indigo-50/50 rounded-2xl border border-indigo-100 space-y-4"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-indigo-600 uppercase">Número de Sección</label>
+                          <input 
+                            placeholder="Ej. 1234"
+                            value={newUSectionName}
+                            onChange={e => setNewUSectionName(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-indigo-200 bg-white"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-indigo-600 uppercase">Casillas (Comas)</label>
+                          <input 
+                            placeholder="Básica, Contigua 1..."
+                            value={newUSectionCasillas}
+                            onChange={e => setNewUSectionCasillas(e.target.value)}
+                            className="w-full px-4 py-2.5 rounded-xl border border-indigo-200 bg-white"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setIsAddingUserSection(false)}
+                          className="flex-1 py-3 text-neutral-500 font-bold text-xs"
+                        >
+                          Cancelar
+                        </button>
+                        <button 
+                          onClick={() => handleAddManualSectionToUser(userInModal.id)}
+                          className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-md"
+                        >
+                          Añadir Sección
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                    {(() => {
+                      const userSections = sections.filter(s => (userInModal.assignedSections || []).includes(s.id));
+                      if (userSections.length === 0) {
+                        return (
+                          <div className="py-20 text-center space-y-3">
+                            <Box className="w-12 h-12 text-neutral-200 mx-auto" />
+                            <p className="text-neutral-400 font-bold">No hay secciones asignadas</p>
+                          </div>
+                        );
+                      }
+                      return userSections.map(section => {
+                        const isSelected = selectedUSections.includes(section.id);
+                        return (
+                          <div
+                            key={section.id}
+                            className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all ${
+                              isSelected 
+                              ? 'border-indigo-600 bg-indigo-50 shadow-sm' 
+                              : 'border-neutral-100 bg-white hover:border-neutral-200'
+                            }`}
+                          >
+                            <div className="flex items-center gap-4 min-w-0">
+                              <button
+                                onClick={() => {
+                                  setSelectedUSections(prev => 
+                                    isSelected ? prev.filter(id => id !== section.id) : [...prev, section.id]
+                                  );
+                                }}
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-indigo-600 border-indigo-600' : 'border-neutral-200 hover:border-indigo-400'}`}
+                              >
+                                {isSelected && <Check className="w-3 h-3 text-white" strokeWidth={4} />}
+                              </button>
+                              <div className="truncate">
+                                <p className="font-black text-neutral-900 group-hover:text-indigo-600 transition-colors">Sección {section.name}</p>
+                                <p className="text-xs text-neutral-400 font-bold uppercase tracking-widest truncate">Casillas: {section.casillas?.join(', ') || 'Global'}</p>
+                              </div>
+                            </div>
+                            <button 
+                              onClick={() => handleDeleteSection(section.id, userInModal.id)}
+                              className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+
+                  <div className="mt-8 pt-6 border-t border-neutral-100">
+                    <button 
+                      onClick={() => setAssigningSectionsUser(null)}
+                      className="w-full py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl"
+                    >
+                      Cerrar Administración
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            );
+          })()}
+        </AnimatePresence>
       </div>
     </div>
   );
