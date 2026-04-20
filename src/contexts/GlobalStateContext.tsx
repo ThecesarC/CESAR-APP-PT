@@ -7,7 +7,8 @@ import {
   collection, 
   query, 
   orderBy,
-  getCountFromServer
+  getCountFromServer,
+  getDocs
 } from 'firebase/firestore';
 
 interface GlobalState {
@@ -16,6 +17,7 @@ interface GlobalState {
   registrations: any[];
   userProfile: any;
   registrationCount: number;
+  totalCasillasCount: number;
   loading: boolean;
   refreshCount: () => Promise<void>;
 }
@@ -28,6 +30,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
   const [registrations, setRegistrations] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [registrationCount, setRegistrationCount] = useState(0);
+  const [totalCasillasCount, setTotalCasillasCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUid, setCurrentUid] = useState<string | null>(null);
@@ -45,6 +48,15 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       const coll = collection(db, 'registrations');
       const snapshot = await getCountFromServer(coll);
       setRegistrationCount(snapshot.data().count);
+      
+      const sectionsColl = collection(db, 'sections');
+      const sectionsSnap = await getDocs(sectionsColl);
+      let total = 0;
+      sectionsSnap.forEach(doc => {
+        const data = doc.data();
+        total += (data.casillas?.length || 1);
+      });
+      setTotalCasillasCount(total);
     } catch (e) {
       console.error("Error refreshing count:", e);
     }
@@ -65,6 +77,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       setRegistrations([]);
       setUserProfile(null);
       setLoading(false);
+      setTotalCasillasCount(0);
       return () => unsubSettings();
     }
 
@@ -76,7 +89,10 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
     // 2. Sections Listener
     const qSections = query(collection(db, 'sections'), orderBy('order', 'asc'));
     const unsubSections = onSnapshot(qSections, (snap) => {
-      setSections(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setSections(docs);
+      const total = docs.reduce((acc, s: any) => acc + (s.casillas?.length || 1), 0);
+      setTotalCasillasCount(total);
     }, (error) => {
       console.error("Sections listener error:", error);
     });
@@ -107,6 +123,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       registrations, 
       userProfile,
       registrationCount, 
+      totalCasillasCount,
       loading,
       refreshCount
     }}>

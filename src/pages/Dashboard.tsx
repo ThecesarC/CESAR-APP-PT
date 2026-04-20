@@ -9,7 +9,7 @@ import { es } from 'date-fns/locale';
 import { motion } from 'framer-motion';
 
 export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boolean }) {
-  const { settings, sections, registrations, userProfile, registrationCount, refreshCount } = useGlobalState();
+  const { settings, sections, registrations, userProfile, refreshCount } = useGlobalState();
   const [personName, setPersonName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [ineFront, setIneFront] = useState<string | null>(null);
@@ -18,12 +18,26 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
   const [casilla, setCasilla] = useState('');
   const [loading, setLoading] = useState(false);
   const [dashboardOrder, setDashboardOrder] = useState(['welcome', 'form', 'activity']);
-  const TOTAL_SECTIONS = 188;
 
   // Filter sections based on assignments - Relying on assignedSections array for strict ownership
   const availableSections = isAdmin 
     ? sections 
     : sections.filter(s => (userProfile?.assignedSections || []).includes(s.id));
+
+  // User-specific progress calculation
+  const assignedSectionIds = (userProfile?.assignedSections || []);
+  const actualAssignedIds = assignedSectionIds.filter(id => sections.some(s => s.id === id));
+  const mySections = sections.filter(s => actualAssignedIds.includes(s.id));
+  
+  const myTotalCasillasCount = mySections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+  const myRegistrationCount = registrations.filter(r => 
+    actualAssignedIds.includes(r.sectionId) && 
+    r.responsibleId === (userProfile?.id || user?.uid)
+  ).length;
+
+  const progressPercentage = myTotalCasillasCount > 0 
+    ? Math.min((myRegistrationCount / myTotalCasillasCount) * 100, 100).toFixed(2)
+    : "0.00";
 
   // Get casillas for selected section
   const selectedSection = sections.find(s => s.id === sectionId);
@@ -36,7 +50,6 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
   }, [settings]);
 
   const recentRegistrations = registrations.slice(0, 5);
-  const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
     const file = e.target.files?.[0];
@@ -91,10 +104,11 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
     const section = sections.find(s => s.id === sectionId);
 
     try {
-      // Check if section already has a responsible
+      // Check if this specific casilla in this section already has a responsible
       const q = query(
         collection(db, 'registrations'),
         where('sectionId', '==', sectionId),
+        where('casilla', '==', casilla),
         limit(1)
       );
       
@@ -102,7 +116,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       
       if (!querySnapshot.empty) {
         const existingData = querySnapshot.docs[0].data();
-        toast.error(`Esta seccion ya cuenta con un responsable: ${existingData.personName}`);
+        toast.error(`Esta casilla ya cuenta con un responsable: ${existingData.personName}`);
         setLoading(false);
         return;
       }
@@ -137,7 +151,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
   return (
     <div className="space-y-8">
-      {dashboardOrder.map((item) => (
+      {(dashboardOrder || []).map((item) => (
         <React.Fragment key={item}>
           {item === 'welcome' && (
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -164,7 +178,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                     </div>
                     <span className="text-2xl font-black text-red-600">{progressPercentage}%</span>
                     <div className="flex flex-col gap-1 mt-1">
-                      {registrationCount === 0 && (
+                      {myRegistrationCount === 0 && myTotalCasillasCount > 0 && (
                         <div className="flex items-center gap-1">
                           <div className="w-1.5 h-1.5 bg-red-400 rounded-full animate-pulse" />
                           <p className="text-[8px] text-red-400 italic">Sincronizando...</p>
@@ -188,8 +202,8 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs font-bold text-neutral-900">{registrationCount}</span>
-                    <span className="text-xs text-neutral-400"> / {TOTAL_SECTIONS}</span>
+                    <span className="text-xs font-bold text-neutral-900">{myRegistrationCount}</span>
+                    <span className="text-xs text-neutral-400"> / {myTotalCasillasCount}</span>
                   </div>
                 </div>
                 <div className="w-full h-3 bg-red-50 rounded-full overflow-hidden border border-red-50">

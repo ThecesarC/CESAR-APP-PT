@@ -1203,7 +1203,7 @@ export default function Admin() {
                   {/* Mock Header */}
                   <header className="px-4 md:px-8 py-4 md:py-6 border-b border-neutral-100 flex items-center justify-between sticky top-0 bg-white/80 backdrop-blur-md z-10">
                     <div className="flex items-center gap-3 md:gap-6">
-                      {uiSettings.headerLayout.map(item => (
+                      {(uiSettings.headerLayout || []).map(item => (
                         <React.Fragment key={item}>
                           {item === 'logo' && (
                             uiSettings.logoUrl ? (
@@ -1234,7 +1234,7 @@ export default function Admin() {
                   <div className="flex min-h-full">
                     {/* Mock Sidebar */}
                     <aside className="w-16 md:w-48 border-r border-neutral-100 p-2 md:p-4 space-y-2">
-                      {uiSettings.sidebarOrder.map(item => (
+                      {(uiSettings.sidebarOrder || []).map(item => (
                         <div key={item} className={`p-2 rounded-lg text-[10px] md:text-xs font-bold flex flex-col md:flex-row items-center gap-1 md:gap-2 ${item === 'dashboard' ? 'bg-indigo-50 text-indigo-600' : 'text-neutral-400'}`}>
                           {item === 'dashboard' && <LayoutDashboard className="w-4 h-4" />}
                           {item === 'sections' && <List className="w-4 h-4" />}
@@ -1250,7 +1250,7 @@ export default function Admin() {
 
                     {/* Mock Content */}
                     <div className="flex-1 p-4 md:p-10 space-y-6 md:space-y-10" style={{ backgroundColor: uiSettings.backgroundColor, fontFamily: uiSettings.fontFamily }}>
-                      {uiSettings.dashboardOrder.map(item => (
+                      {(uiSettings.dashboardOrder || []).map(item => (
                         <React.Fragment key={item}>
                           {item === 'welcome' && (
                             <div className="max-w-2xl">
@@ -1277,7 +1277,7 @@ export default function Admin() {
                       ))}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                        {layoutSections.map((section) => (
+                        {(layoutSections || []).map((section) => (
                           <div key={section.id} className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl border border-neutral-200 shadow-sm hover:shadow-md transition-all">
                             <div className="w-10 h-10 md:w-12 md:h-12 bg-neutral-50 rounded-xl md:rounded-2xl flex items-center justify-center mb-3 md:mb-4 text-indigo-600">
                               <LayoutGrid className="w-5 h-5 md:w-6 md:h-6" />
@@ -1301,11 +1301,11 @@ export default function Admin() {
                     <h4 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Estructura del Menú</h4>
                     <Reorder.Group 
                       axis="y" 
-                      values={uiSettings.sidebarOrder} 
+                      values={uiSettings.sidebarOrder || []} 
                       onReorder={(val) => setUiSettings({...uiSettings, sidebarOrder: val})}
                       className="space-y-2"
                     >
-                      {uiSettings.sidebarOrder.map((item) => (
+                      {(uiSettings.sidebarOrder || []).map((item) => (
                         <Reorder.Item key={item} value={item} className="cursor-grab active:cursor-grabbing">
                           <div className="bg-white border border-neutral-200 p-3 rounded-xl flex items-center gap-3 text-sm font-bold text-neutral-700 hover:border-indigo-600 transition-all">
                             <GripVertical className="w-4 h-4 text-neutral-300" />
@@ -1322,11 +1322,11 @@ export default function Admin() {
                     <h4 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Elementos de Cabecera</h4>
                     <Reorder.Group 
                       axis="x" 
-                      values={uiSettings.headerLayout} 
+                      values={uiSettings.headerLayout || []} 
                       onReorder={(val) => setUiSettings({...uiSettings, headerLayout: val})}
                       className="flex gap-2 mb-8"
                     >
-                      {uiSettings.headerLayout.map((item) => (
+                      {(uiSettings.headerLayout || []).map((item) => (
                         <Reorder.Item key={item} value={item} className="cursor-grab active:cursor-grabbing flex-1">
                           <div className="bg-white border border-neutral-200 p-3 rounded-xl flex flex-col items-center gap-2 text-[10px] font-bold text-neutral-700 hover:border-indigo-600 transition-all text-center">
                             <GripVertical className="w-3 h-3 text-neutral-300 rotate-90" />
@@ -1343,11 +1343,11 @@ export default function Admin() {
                     <h4 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Orden Página de Login</h4>
                     <Reorder.Group 
                       axis="y" 
-                      values={uiSettings.loginOrder} 
+                      values={uiSettings.loginOrder || []} 
                       onReorder={(val) => setUiSettings({...uiSettings, loginOrder: val})}
                       className="space-y-2"
                     >
-                      {uiSettings.loginOrder.map((item) => (
+                      {(uiSettings.loginOrder || []).map((item) => (
                         <Reorder.Item key={item} value={item} className="cursor-grab active:cursor-grabbing">
                           <div className="bg-white border border-neutral-200 p-3 rounded-xl flex items-center gap-3 text-sm font-bold text-neutral-700 hover:border-indigo-600 transition-all">
                             <GripVertical className="w-4 h-4 text-neutral-300" />
@@ -1369,11 +1369,11 @@ export default function Admin() {
                     <h4 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Orden de la Página Principal</h4>
                     <Reorder.Group 
                       axis="y" 
-                      values={uiSettings.dashboardOrder} 
+                      values={uiSettings.dashboardOrder || []} 
                       onReorder={(val) => setUiSettings({...uiSettings, dashboardOrder: val})}
                       className="space-y-3"
                     >
-                      {uiSettings.dashboardOrder.map((item) => (
+                      {(uiSettings.dashboardOrder || []).map((item) => (
                         <Reorder.Item key={item} value={item} className="cursor-grab active:cursor-grabbing">
                           <div className="bg-white border-2 border-neutral-100 p-4 rounded-2xl flex items-center gap-4 hover:border-indigo-600 transition-all group">
                             <div className="bg-neutral-50 p-2 rounded-lg">

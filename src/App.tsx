@@ -131,6 +131,32 @@ export default function App() {
           />
 
           <Route 
+            path="/sections" 
+            element={
+              user ? (
+                <Layout user={user} isAdmin={isAdmin}>
+                  <Sections />
+                </Layout>
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+
+          <Route 
+            path="/sections/:sectionId" 
+            element={
+              user ? (
+                <Layout user={user} isAdmin={isAdmin}>
+                  <SectionDetail />
+                </Layout>
+              ) : (
+                <Navigate to="/login" />
+              )
+            } 
+          />
+
+          <Route 
             path="/admin" 
             element={
               user && isAdmin ? (

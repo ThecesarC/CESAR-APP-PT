@@ -20,7 +20,7 @@ const ICON_MAP: Record<string, any> = {
 export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings, registrationCount, refreshCount } = useGlobalState();
+  const { settings, registrations, sections, userProfile, refreshCount } = useGlobalState();
   
   const [appIcon, setAppIcon] = React.useState('Shield');
   const [logoUrl, setLogoUrl] = React.useState('https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg');
@@ -30,7 +30,6 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
-  const TOTAL_SECTIONS = 188;
 
   React.useEffect(() => {
     if (settings) {
@@ -38,12 +37,29 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
       if (settings.logoUrl) setLogoUrl(settings.logoUrl);
       if (settings.mapUrl) setMapUrl(settings.mapUrl);
       if (settings.mapEmbedUrl) setMapEmbedUrl(settings.mapEmbedUrl);
-      if (settings.sidebarOrder) setSidebarOrder(settings.sidebarOrder.filter((o: string) => o !== 'sections'));
+      if (settings.sidebarOrder) setSidebarOrder(settings.sidebarOrder);
       if (settings.headerLayout) setHeaderLayout(settings.headerLayout);
     }
   }, [settings]);
 
-  const progressPercentage = Math.min((registrationCount / TOTAL_SECTIONS) * 100, 100).toFixed(2);
+  // User-specific progress calculation
+  const assignedSectionIds = (userProfile?.assignedSections || []);
+  
+  // Filter only those that actually exist in the current sections catalog
+  const actualAssignedIds = assignedSectionIds.filter(id => sections.some(s => s.id === id));
+  const mySections = sections.filter(s => actualAssignedIds.includes(s.id));
+  
+  const myTotalCasillasCount = mySections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+  
+  // Filter registrations: Must be in my assigned sections AND made by ME
+  const myRegistrationCount = registrations.filter(r => 
+    actualAssignedIds.includes(r.sectionId) && 
+    r.responsibleId === (userProfile?.id || user?.uid)
+  ).length;
+
+  const progressPercentage = myTotalCasillasCount > 0 
+    ? Math.min((myRegistrationCount / myTotalCasillasCount) * 100, 100).toFixed(2)
+    : "0.00";
 
   const AppIcon = ICON_MAP[appIcon] || Shield;
 
@@ -64,6 +80,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
 
   const navItems = [
     { name: 'Panel de Registro', path: '/', icon: LayoutDashboard },
+    { name: 'Mis Secciones', path: '/sections', icon: List },
   ];
 
   if (isAdmin) {
@@ -115,7 +132,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
           </button>
           
           <div className="flex items-center gap-3 md:gap-6">
-            {headerLayout.map(item => (
+            {(headerLayout || []).map(item => (
               <React.Fragment key={item}>
                 {item === 'logo' && (
                   logoUrl ? (
@@ -246,12 +263,12 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                   />
                 </div>
                 <p className="text-[10px] text-red-500 mt-2 font-medium">
-                  {registrationCount} de {TOTAL_SECTIONS} responsables registrados
+                  {myRegistrationCount} de {myTotalCasillasCount} responsables registrados
                 </p>
               </div>
 
               <div className="flex flex-col gap-2">
-                {sidebarOrder.map((itemKey) => {
+                {(sidebarOrder || []).map((itemKey) => {
                   const item = navItems.find(n => {
                     if (itemKey === 'dashboard') return n.path === '/';
                     if (itemKey === 'sections') return n.path === '/sections';
@@ -354,14 +371,14 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               />
             </div>
             <p className="text-[9px] text-red-400 mt-2 font-medium text-center">
-              {registrationCount} de {TOTAL_SECTIONS} secciones cubiertas
+              {myRegistrationCount} de {myTotalCasillasCount} casillas cubiertas
             </p>
-            {registrationCount === 0 && (
+            {myRegistrationCount === 0 && (
               <p className="text-[7px] text-red-300 italic text-center mt-1">Buscando datos...</p>
             )}
           </div>
 
-          {sidebarOrder.map((itemKey) => {
+          {(sidebarOrder || []).map((itemKey) => {
             const item = navItems.find(n => {
               if (itemKey === 'dashboard') return n.path === '/';
               if (itemKey === 'sections') return n.path === '/sections';
