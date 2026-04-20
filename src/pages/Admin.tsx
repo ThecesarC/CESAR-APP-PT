@@ -7,7 +7,8 @@ import { firebaseConfig } from '../firebase';
 import { getAuth as getSecondaryAuth, createUserWithEmailAndPassword as createSecondaryUser, signOut as signSecondaryOut, signInWithEmailAndPassword } from 'firebase/auth';
 import { 
   collection, doc, updateDoc, setDoc, deleteDoc, 
-  query, orderBy, onSnapshot, writeBatch, addDoc as fireAddDoc, getDoc
+  query, orderBy, onSnapshot, writeBatch, addDoc as fireAddDoc, getDoc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { AnimatePresence, motion, Reorder } from 'framer-motion';
 import { 
@@ -15,7 +16,8 @@ import {
   Plus, Trash2, Save, ChevronRight, X, GripVertical,
   FileText, FileSpreadsheet, Image as ImageIcon, Video, Link as LinkIcon,
   Upload, Check, Heart, Star, Zap, Shield, Target, Rocket, Box, Activity,
-  Move, ArrowLeft, LayoutDashboard, List, Download, AlertTriangle, ShieldCheck
+  Move, ArrowLeft, LayoutDashboard, List, Download, AlertTriangle, ShieldCheck,
+  Eye, Edit
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -23,6 +25,8 @@ import { es } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
+import Cropper from 'react-easy-crop';
+import { Scissors } from 'lucide-react';
 
 function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmText = "Eliminar", type = "danger" }: any) {
   if (!isOpen) return null;
@@ -315,7 +319,9 @@ export default function Admin() {
   const [newUserPassword, setNewUserPassword] = useState('');
   const [isCreatingUser, setIsCreatingUser] = useState(false);
   const [assigningSectionsUser, setAssigningSectionsUser] = useState<any>(null);
+  const [fileManagingSection, setFileManagingSection] = useState<any>(null);
   const [showUserSectionsWipeConfirm, setShowUserSectionsWipeConfirm] = useState(false);
+  const [editingRegistration, setEditingRegistration] = useState<any>(null);
 
   const handleUpdateAssignedSections = async (userId: string, sectionIds: string[]) => {
     try {
@@ -325,6 +331,16 @@ export default function Admin() {
       toast.success('Secciones actualizadas');
     } catch (e) {
       toast.error('Error al actualizar secciones');
+    }
+  };
+
+  const toggleUserRole = async (userId: string, currentRole: string) => {
+    try {
+      const nextRole = currentRole === 'admin' ? 'user' : 'admin';
+      await updateDoc(doc(db, 'users', userId), { role: nextRole });
+      toast.success(`Rol cambiado a ${nextRole === 'admin' ? 'Administrador' : 'Usuario'}`);
+    } catch (e) {
+      toast.error('Error al cambiar rol');
     }
   };
 
@@ -361,7 +377,113 @@ export default function Admin() {
     }
   };
 
+  const handleConsolidateSections = async () => {
+    const toastId = toast.loading('Consolidando catálogo y corrigiendo conflictos...');
+    try {
+      // 1. Group sections by name (case-insensitive)
+      const nameGroups = new Map<string, any[]>();
+      sections.forEach(s => {
+        const key = s.name.toLowerCase().trim();
+        if (!nameGroups.has(key)) nameGroups.set(key, []);
+        nameGroups.get(key)?.push(s);
+      });
+
+      const batch = writeBatch(db);
+      let mergeCount = 0;
+      let registrationUpdates = 0;
+      let userUpdates = 0;
+
+      for (const [name, dupes] of nameGroups.entries()) {
+        if (dupes.length > 1) {
+          // Identify the best "Main" section (the one with files or the first one)
+          const main = dupes.find(s => (s.files?.length || 0) > 0) || dupes[0];
+          const otherIds = dupes.filter(s => s.id !== main.id).map(s => s.id);
+
+          // Merge all casillas into main
+          const allCasillas = new Set(main.casillas || []);
+          dupes.forEach(s => (s.casillas || []).forEach((c: string) => allCasillas.add(c)));
+
+          batch.update(doc(db, 'sections', main.id), { 
+            casillas: Array.from(allCasillas),
+            updatedAt: serverTimestamp()
+          });
+
+          // Update registrations pointing to discarded sections
+          registrations.forEach(reg => {
+            if (otherIds.includes(reg.sectionId)) {
+              batch.update(doc(db, 'registrations', reg.id), { 
+                sectionId: main.id,
+                sectionName: main.name,
+                updatedAt: serverTimestamp()
+              });
+              registrationUpdates++;
+            }
+          });
+
+          // Update users pointing to discarded sections
+          users.forEach(u => {
+            const current = u.assignedSections || [];
+            if (current.some((id: string) => otherIds.includes(id))) {
+              const cleaned = Array.from(new Set(
+                current.map((id: string) => otherIds.includes(id) ? main.id : id)
+              ));
+              batch.update(doc(db, 'users', u.id), { assignedSections: cleaned });
+              userUpdates++;
+            }
+          });
+
+          // Delete the extra sections
+          otherIds.forEach(id => {
+            batch.delete(doc(db, 'sections', id));
+            mergeCount++;
+          });
+        }
+      }
+
+      await batch.commit();
+      toast.success(`Saneamiento completo. ${mergeCount} duplicados eliminados. ${registrationUpdates} registros y ${userUpdates} usuarios sincronizados.`, { id: toastId });
+    } catch (e) {
+      console.error(e);
+      toast.error('Error durante la consolidación del catálogo', { id: toastId });
+    }
+  };
+
+  const handleNuclearClean = async () => {
+    const liz = users.find(u => 
+      u.displayName?.toLowerCase().includes('liz') || 
+      u.email?.toLowerCase().includes('liz')
+    );
+
+    if (!liz) {
+      toast.error('No se encontró al usuario de Liz Betancourt para referenciar el catálogo activo.');
+      return;
+    }
+
+    const toastId = toast.loading('Realizando purga definitiva de secciones obsoletas...');
+    try {
+      const allowedSectionIds = new Set(liz.assignedSections || []);
+      const batch = writeBatch(db);
+      let deletedCount = 0;
+
+      sections.forEach(s => {
+        if (!allowedSectionIds.has(s.id)) {
+          batch.delete(doc(db, 'sections', s.id));
+          deletedCount++;
+        }
+      });
+
+      await batch.commit();
+      toast.success(`Purga completada. Se eliminaron ${deletedCount} secciones que no pertenecían al catálogo de Liz.`, { id: toastId });
+    } catch (e) {
+      console.error(e);
+      toast.error('Error durante la purga atómica', { id: toastId });
+    }
+  };
+
   const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [showConsolidateConfirm, setShowConsolidateConfirm] = useState(false);
+  const [showNuclearConfirm, setShowNuclearConfirm] = useState(false);
+
   const handleWipeSections = async () => {
     const toastId = toast.loading('Borrando catálogo de secciones...');
     try {
@@ -1095,19 +1217,32 @@ export default function Admin() {
 
         const batch = writeBatch(db);
         data.forEach((row, index) => {
-          const sectionRef = doc(collection(db, 'sections'));
+          const name = String(row.seccion || row.Seccion || row.SECCION || `Sección ${sections.length + index + 1}`);
+          const existingSection = sections.find(s => s.name.toLowerCase() === name.toLowerCase());
+          
           const casillasRaw = row.casillas || row.Casillas || row.CASILLAS || '';
           const casillas = typeof casillasRaw === 'string' 
             ? casillasRaw.split(',').map(c => c.trim()).filter(c => c)
             : (typeof casillasRaw === 'number' ? [String(casillasRaw)] : []);
 
-          batch.set(sectionRef, {
-            name: String(row.seccion || row.Seccion || row.SECCION || `Sección ${sections.length + index + 1}`),
-            description: '',
-            order: sections.length + index,
-            files: [],
-            casillas: casillas
-          });
+          if (existingSection) {
+            // Update existing section instead of duplicating
+            const combinedCasillas = Array.from(new Set([...(existingSection.casillas || []), ...casillas]));
+            batch.update(doc(db, 'sections', existingSection.id), { 
+              casillas: combinedCasillas,
+              updatedAt: serverTimestamp()
+            });
+          } else {
+            const sectionRef = doc(collection(db, 'sections'));
+            batch.set(sectionRef, {
+              name,
+              description: '',
+              order: sections.length + index,
+              files: [],
+              casillas: casillas,
+              createdAt: serverTimestamp()
+            });
+          }
         });
 
         await batch.commit();
@@ -1322,11 +1457,11 @@ export default function Admin() {
                     <h4 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Elementos de Cabecera</h4>
                     <Reorder.Group 
                       axis="x" 
-                      values={uiSettings.headerLayout || []} 
+                      values={Array.from(new Set(uiSettings.headerLayout || []))} 
                       onReorder={(val) => setUiSettings({...uiSettings, headerLayout: val})}
                       className="flex gap-2 mb-8"
                     >
-                      {(uiSettings.headerLayout || []).map((item) => (
+                      {Array.from(new Set(uiSettings.headerLayout || [])).map((item) => (
                         <Reorder.Item key={item} value={item} className="cursor-grab active:cursor-grabbing flex-1">
                           <div className="bg-white border border-neutral-200 p-3 rounded-xl flex flex-col items-center gap-2 text-[10px] font-bold text-neutral-700 hover:border-indigo-600 transition-all text-center">
                             <GripVertical className="w-3 h-3 text-neutral-300 rotate-90" />
@@ -1343,11 +1478,11 @@ export default function Admin() {
                     <h4 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Orden Página de Login</h4>
                     <Reorder.Group 
                       axis="y" 
-                      values={uiSettings.loginOrder || []} 
+                      values={Array.from(new Set(uiSettings.loginOrder || []))} 
                       onReorder={(val) => setUiSettings({...uiSettings, loginOrder: val})}
                       className="space-y-2"
                     >
-                      {(uiSettings.loginOrder || []).map((item) => (
+                      {Array.from(new Set(uiSettings.loginOrder || [])).map((item) => (
                         <Reorder.Item key={item} value={item} className="cursor-grab active:cursor-grabbing">
                           <div className="bg-white border border-neutral-200 p-3 rounded-xl flex items-center gap-3 text-sm font-bold text-neutral-700 hover:border-indigo-600 transition-all">
                             <GripVertical className="w-4 h-4 text-neutral-300" />
@@ -1369,11 +1504,11 @@ export default function Admin() {
                     <h4 className="text-sm font-bold text-neutral-400 uppercase tracking-widest mb-4">Orden de la Página Principal</h4>
                     <Reorder.Group 
                       axis="y" 
-                      values={uiSettings.dashboardOrder || []} 
+                      values={Array.from(new Set(uiSettings.dashboardOrder || []))} 
                       onReorder={(val) => setUiSettings({...uiSettings, dashboardOrder: val})}
                       className="space-y-3"
                     >
-                      {(uiSettings.dashboardOrder || []).map((item) => (
+                      {Array.from(new Set(uiSettings.dashboardOrder || [])).map((item) => (
                         <Reorder.Item key={item} value={item} className="cursor-grab active:cursor-grabbing">
                           <div className="bg-white border-2 border-neutral-100 p-4 rounded-2xl flex items-center gap-4 hover:border-indigo-600 transition-all group">
                             <div className="bg-neutral-50 p-2 rounded-lg">
@@ -1624,6 +1759,26 @@ export default function Admin() {
                   <Plus className="w-5 h-5" />
                   Nuevo Usuario
                 </button>
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-neutral-200 bg-neutral-50 text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                  <LayoutGrid className="w-4 h-4 text-neutral-400" />
+                  Catálogo: {sections.length} Secciones
+                </div>
+                <button 
+                  onClick={() => setShowConsolidateConfirm(true)}
+                  className="bg-amber-100 text-amber-700 px-4 py-3 rounded-xl font-bold hover:bg-amber-200 transition-all text-[10px] uppercase tracking-widest flex items-center gap-2 border border-amber-200"
+                  title="Eliminar duplicados y consolidar catálogo"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  Depurar Catálogo
+                </button>
+                <button 
+                  onClick={() => setShowNuclearConfirm(true)}
+                  className="bg-red-100 text-red-700 px-4 py-3 rounded-xl font-bold hover:bg-red-200 transition-all text-[10px] uppercase tracking-widest flex items-center gap-2 border border-red-200"
+                  title="BORRAR DEFINITIVAMENTE todo excepto lo de Liz Betancourt"
+                >
+                  <Target className="w-4 h-4" />
+                  Purga Nuclear
+                </button>
                 <button 
                   onClick={() => setShowWipeConfirm(true)}
                   className="p-3 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all ml-2"
@@ -1633,6 +1788,25 @@ export default function Admin() {
                 </button>
               </div>
             </div>
+
+            <ConfirmModal 
+              isOpen={showConsolidateConfirm}
+              onClose={() => setShowConsolidateConfirm(false)}
+              onConfirm={handleConsolidateSections}
+              title="¿Depurar y Consolidar Catálogo?"
+              message="Esta acción buscará secciones con nombres idénticos, fusionará sus casillas y eliminará los duplicados. También actualizará automáticamente todos los registros y asignaciones de usuarios vinculados. ¿Deseas continuar?"
+              type="warning"
+            />
+
+            <ConfirmModal 
+              isOpen={showNuclearConfirm}
+              onClose={() => setShowNuclearConfirm(false)}
+              onConfirm={handleNuclearClean}
+              title="¿EJECUTAR PURGA ATÓMICA?"
+              message="ATENCIÓN: Se eliminarán DEFINITIVAMENTE todas las secciones que no estén asignadas al usuario de Liz Betancourt. Esta es la limpieza final para dejar solo las 72 casillas reales. ¿Estás absolutamente seguro?"
+              type="danger"
+              confirmText="EJECUTAR LIMPIEZA TOTAL"
+            />
 
             <ConfirmModal 
               isOpen={showWipeConfirm}
@@ -1790,7 +1964,19 @@ export default function Admin() {
                           </div>
                         </td>
                         <td className="px-6 py-4 font-medium text-neutral-600">
-                          {user.email || 'N/A'}
+                          <div className="flex flex-col">
+                            <span className="text-sm">{user.email || 'N/A'}</span>
+                            <button 
+                              onClick={() => toggleUserRole(user.id, user.role)}
+                              className={`text-[9px] font-black uppercase tracking-widest mt-1 w-fit px-2 py-0.5 rounded-md border ${
+                                user.role === 'admin' 
+                                ? 'bg-red-50 border-red-100 text-red-600' 
+                                : 'bg-blue-50 border-blue-100 text-blue-600'
+                              }`}
+                            >
+                              {user.role === 'admin' ? 'Administrador' : 'Usuario Estándar'}
+                            </button>
+                          </div>
                         </td>
                         <td className="px-6 py-4">
                           <button 
@@ -1840,6 +2026,16 @@ export default function Admin() {
                 <p className="text-sm text-neutral-500">Consulta y descarga todos los registros realizados en tiempo real.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <div className="flex items-center gap-2 px-4 py-2 bg-neutral-100 rounded-xl border border-neutral-200">
+                  <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Resumen de Avance</span>
+                  <div className="h-4 w-[1px] bg-neutral-300" />
+                  <span className="text-xs font-bold text-neutral-600">
+                    {registrations.length} Registros Totales
+                  </span>
+                  <span className="text-xs font-bold text-indigo-600">
+                    ({new Set(registrations.map(r => `${r.sectionId}-${r.casilla}`)).size} Casillas Únicas)
+                  </span>
+                </div>
                 {selectedRegistrations.length > 0 && (
                   <button 
                     onClick={() => setShowBulkRegDeleteConfirm(true)}
@@ -1952,13 +2148,22 @@ export default function Admin() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button 
-                          onClick={() => setRegToDelete(reg.id)}
-                          className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                          title="Eliminar registro"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex justify-end gap-2">
+                          <button 
+                            onClick={() => setEditingRegistration(reg)}
+                            className="p-2 text-neutral-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                            title="Editar registro"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => setRegToDelete(reg.id)}
+                            className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                            title="Eliminar registro"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1988,6 +2193,13 @@ export default function Admin() {
               title={`¿Eliminar ${selectedRegistrations.length} registros?`}
               message={`Estás a punto de eliminar permanentemente ${selectedRegistrations.length} registros seleccionados. ¿Deseas continuar?`}
             />
+
+            {editingRegistration && (
+              <EditRegistrationModal 
+                registration={editingRegistration} 
+                onClose={() => setEditingRegistration(null)} 
+              />
+            )}
           </div>
         )}
 
@@ -2139,12 +2351,21 @@ export default function Admin() {
                                 <p className="text-xs text-neutral-400 font-bold uppercase tracking-widest truncate">Casillas: {section.casillas?.join(', ') || 'Global'}</p>
                               </div>
                             </div>
-                            <button 
-                              onClick={() => handleDeleteSection(section.id, userInModal.id)}
-                              className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              <div className="flex items-center gap-2">
+                                <button 
+                                  onClick={() => setFileManagingSection(section)}
+                                  className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                                  title="Gestionar Archivos"
+                                >
+                                  <Upload className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteSection(section.id, userInModal.id)}
+                                  className="p-2 text-neutral-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
                           </div>
                         );
                       });
@@ -2163,8 +2384,529 @@ export default function Admin() {
               </div>
             );
           })()}
+          {fileManagingSection && (
+            <ManageSectionFilesModal 
+              section={fileManagingSection} 
+              onClose={() => setFileManagingSection(null)}
+              onUpdate={() => {}}
+            />
+          )}
         </AnimatePresence>
       </div>
+    </div>
+  );
+}
+
+function EditRegistrationModal({ registration, onClose }: any) {
+  const { sections } = useGlobalState();
+  const [data, setData] = useState({ ...registration });
+  const [isSaving, setIsSaving] = useState(false);
+  const [croppingImage, setCroppingImage] = useState<any>(null);
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast.error('Por favor selecciona un archivo de imagen');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setCroppingImage({
+        url: event.target?.result as string,
+        side
+      });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // Exclude ID and original createdAt from update
+      const { id, createdAt, ...updateData } = data;
+      
+      // Add updatedAt timestamp
+      const finalUpdate = {
+        ...updateData,
+        updatedAt: serverTimestamp()
+      };
+
+      await updateDoc(doc(db, 'registrations', registration.id), finalUpdate);
+
+      // Auto-assign section to responsible if it was changed and not assigned
+      if (updateData.sectionId !== registration.sectionId) {
+        const respId = registration.responsibleId;
+        const userRef = doc(db, 'users', respId);
+        const userSnap = await getDoc(userRef);
+        
+        if (userSnap.exists()) {
+          const currentAssigned = userSnap.data().assignedSections || [];
+          if (!currentAssigned.includes(updateData.sectionId)) {
+            await updateDoc(userRef, {
+              assignedSections: [...currentAssigned, updateData.sectionId]
+            });
+            toast.info(`Sección ${updateData.sectionName} asignada automáticamente al responsable.`);
+          }
+        }
+      }
+
+      toast.success('Registro actualizado');
+      onClose();
+    } catch (e) {
+      console.error("Update error:", e);
+      toast.error('Error al actualizar registro');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto pt-20 pb-20">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white rounded-[2.5rem] p-8 w-full max-w-2xl shadow-2xl my-auto"
+      >
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h3 className="text-2xl font-black text-neutral-900 leading-tight">Editar Registro</h3>
+            <p className="text-xs text-neutral-400 font-bold uppercase tracking-widest mt-1">Sincronización en tiempo real</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-neutral-100 rounded-xl transition-all">
+            <X className="w-6 h-6 text-neutral-400" />
+          </button>
+        </div>
+
+        <div className="space-y-6 max-h-[60vh] overflow-y-auto px-1 pr-4 custom-scrollbar">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Nombre Responsable</label>
+              <input 
+                value={data.personName}
+                onChange={e => setData({...data, personName: e.target.value})}
+                className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all font-medium"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Teléfono</label>
+              <input 
+                value={data.phoneNumber}
+                onChange={e => setData({...data, phoneNumber: e.target.value})}
+                className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Sección</label>
+               <div className="relative">
+                 <select 
+                   value={data.sectionId}
+                   onChange={e => {
+                     const selected = sections.find(s => s.id === e.target.value);
+                     setData({
+                       ...data, 
+                       sectionId: e.target.value,
+                       sectionName: selected?.name || ''
+                     });
+                   }}
+                   className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all font-medium appearance-none bg-white pr-10"
+                 >
+                   <option value="">Seleccionar Sección</option>
+                   {sections.map(s => (
+                     <option key={s.id} value={s.id}>{s.name}</option>
+                   ))}
+                 </select>
+                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <List className="w-4 h-4 text-neutral-400" />
+                 </div>
+               </div>
+             </div>
+             <div className="space-y-2">
+               <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Casilla / Tipo</label>
+               <input 
+                 value={data.casilla}
+                 onChange={e => setData({...data, casilla: e.target.value})}
+                 className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all font-medium"
+               />
+             </div>
+          </div>
+
+          <div className="space-y-4 pt-4 border-t border-neutral-100">
+            <h4 className="text-xs font-black text-neutral-900 uppercase tracking-[0.2em]">Documentación (INE)</h4>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold text-neutral-400 uppercase">Frente</p>
+                <div className="relative group aspect-video rounded-2xl overflow-hidden border-2 border-dashed border-neutral-200 hover:border-indigo-300 transition-all bg-neutral-50 bg-cover bg-center" style={{ backgroundImage: `url(${data.ineFrontUrl})` }}>
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                    <label className="p-3 bg-white text-indigo-600 rounded-xl cursor-pointer hover:scale-110 transition-transform shadow-lg">
+                      <ImageIcon className="w-5 h-5" />
+                      <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(e, 'front')} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold text-neutral-400 uppercase">Reverso</p>
+                <div className="relative group aspect-video rounded-2xl overflow-hidden border-2 border-dashed border-neutral-200 hover:border-indigo-300 transition-all bg-neutral-50 bg-cover bg-center" style={{ backgroundImage: `url(${data.ineBackUrl})` }}>
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                    <label className="p-3 bg-white text-indigo-600 rounded-xl cursor-pointer hover:scale-110 transition-transform shadow-lg">
+                      <ImageIcon className="w-5 h-5" />
+                      <input type="file" className="hidden" accept="image/*" onChange={e => handleFileUpload(e, 'back')} />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p className="text-[10px] text-neutral-400 italic font-medium">Pulsa el icono de imagen sobre la foto para subir una nueva.</p>
+          </div>
+        </div>
+
+        {croppingImage && (
+          <ImageCropperModal 
+            image={croppingImage.url} 
+            onClose={() => setCroppingImage(null)} 
+            onConfirm={(croppedImage: string) => {
+              if (croppingImage.side === 'front') setData({ ...data, ineFrontUrl: croppedImage });
+              else setData({ ...data, ineBackUrl: croppedImage });
+              setCroppingImage(null);
+            }} 
+          />
+        )}
+
+        <div className="mt-10 flex gap-4 pt-6 border-t border-neutral-100">
+          <button 
+            onClick={onClose} 
+            className="flex-1 py-4 text-neutral-500 font-black uppercase tracking-widest hover:bg-neutral-50 rounded-2xl transition-all"
+          >
+            Cancelar
+          </button>
+          <button 
+            disabled={isSaving} 
+            onClick={handleSave} 
+            className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {isSaving ? (
+              <span className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Actualizando...
+              </span>
+            ) : (
+              <>
+                <Check className="w-4 h-4" />
+                Guardar Cambios
+              </>
+            )}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+function ImageCropperModal({ image, onClose, onConfirm }: any) {
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+
+  const onCropComplete = (croppedArea: any, croppedAreaPixels: any) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  };
+
+  const handleConfirm = async () => {
+    try {
+      const croppedImage = await getCroppedImg(image, croppedAreaPixels);
+      onConfirm(croppedImage);
+    } catch (e) {
+      console.error(e);
+      toast.error('Error al recortar la imagen');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+      <div className="bg-neutral-900 rounded-[2.5rem] w-full max-w-4xl h-[80vh] flex flex-col overflow-hidden shadow-2xl border border-white/10">
+        <div className="p-6 flex justify-between items-center bg-black/40 border-b border-white/5">
+          <div>
+            <h3 className="text-xl font-black text-white leading-tight">Recortar INE</h3>
+            <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mt-0.5">Ajusta la imagen al recuadro</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-xl transition-all">
+            <X className="w-6 h-6 text-white/40" />
+          </button>
+        </div>
+        
+        <div className="flex-1 relative bg-black">
+          <Cropper
+            image={image}
+            crop={crop}
+            zoom={zoom}
+            aspect={16 / 10}
+            onCropChange={setCrop}
+            onCropComplete={onCropComplete}
+            onZoomChange={setZoom}
+          />
+        </div>
+
+        <div className="p-8 bg-black/40 border-t border-white/5 space-y-6">
+          <div className="flex items-center gap-6">
+            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Zoom</span>
+            <input 
+              type="range"
+              value={zoom}
+              min={1}
+              max={3}
+              step={0.1}
+              onChange={(e) => setZoom(Number(e.target.value))}
+              className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+            />
+          </div>
+          
+          <div className="flex gap-4">
+            <button 
+              onClick={onClose} 
+              className="flex-1 py-4 text-white/60 font-black uppercase tracking-widest hover:bg-white/5 rounded-2xl transition-all border border-white/10"
+            >
+              Cancelar
+            </button>
+            <button 
+              onClick={handleConfirm} 
+              className="flex-[2] py-4 bg-white text-black rounded-2xl font-black uppercase tracking-widest hover:bg-neutral-200 transition-all shadow-xl flex items-center justify-center gap-2"
+            >
+              <Scissors className="w-4 h-4" />
+              Recortar y Guardar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+async function getCroppedImg(imageSrc: string, pixelCrop: any): Promise<string> {
+  const image = new Image();
+  image.src = imageSrc;
+  await new Promise((resolve) => (image.onload = resolve));
+
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return '';
+
+  canvas.width = pixelCrop.width;
+  canvas.height = pixelCrop.height;
+
+  ctx.drawImage(
+    image,
+    pixelCrop.x,
+    pixelCrop.y,
+    pixelCrop.width,
+    pixelCrop.height,
+    0,
+    0,
+    pixelCrop.width,
+    pixelCrop.height
+  );
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onloadend = () => {
+        resolve(reader.result as string);
+      };
+    }, 'image/jpeg', 0.85);
+  });
+}
+
+function ManageSectionFilesModal({ section, onClose, onUpdate }: any) {
+  const [data, setData] = useState({ ...section, files: section.files || [] });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  const handleFiles = (files: FileList | null) => {
+    if (!files) return;
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const url = e.target?.result as string;
+        let type = 'link';
+        if (file.type === 'application/pdf') type = 'pdf';
+        else if (file.type.includes('excel') || file.type.includes('spreadsheetml') || file.name.endsWith('.xlsx')) type = 'excel';
+        else if (file.type.startsWith('image/')) type = 'image';
+        else if (file.type.startsWith('video/')) type = 'video';
+        
+        setData((prev: any) => ({ ...prev, files: [...prev.files, { name: file.name, url, type }] }));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const addFileByUrl = () => {
+    const name = window.prompt('Nombre del recurso:');
+    const url = window.prompt('URL del recurso:');
+    if (!name || !url) return;
+    
+    let type = 'link';
+    const lowUrl = url.toLowerCase();
+    if (lowUrl.endsWith('.pdf')) type = 'pdf';
+    else if (lowUrl.endsWith('.xlsx') || lowUrl.endsWith('.xls') || lowUrl.endsWith('.csv')) type = 'excel';
+    else if (lowUrl.match(/\.(jpg|jpeg|png|gif|webp)$/)) type = 'image';
+    else if (lowUrl.match(/\.(mp4|webm|ogg)$/) || lowUrl.includes('youtube.com') || lowUrl.includes('youtu.be')) type = 'video';
+    
+    setData({ ...data, files: [...data.files, { name, url, type }] });
+  };
+
+  const removeFile = (idx: number) => {
+    const newFiles = [...data.files];
+    newFiles.splice(idx, 1);
+    setData({ ...data, files: newFiles });
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, 'sections', section.id), { files: data.files });
+      toast.success('Archivos actualizados');
+      onUpdate();
+      onClose();
+    } catch (e) {
+      toast.error('Error al guardar archivos');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white rounded-[2.5rem] p-8 w-full max-w-2xl shadow-2xl flex flex-col max-h-[90vh]"
+      >
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-indigo-600 rounded-2xl text-white">
+              <Upload className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black text-neutral-900 leading-tight">Gestionar Contenido</h3>
+              <p className="text-sm text-neutral-500 font-bold uppercase tracking-widest mt-1">Sección {section.name}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-neutral-100 rounded-xl transition-all">
+            <X className="w-6 h-6 text-neutral-400" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto space-y-6 pr-2 custom-scrollbar">
+          <div 
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleFiles(e.dataTransfer.files); }}
+            className={`relative border-2 border-dashed rounded-3xl p-10 transition-all flex flex-col items-center justify-center gap-4 group cursor-pointer ${
+              isDragging 
+              ? 'border-indigo-600 bg-indigo-50' 
+              : 'border-neutral-100 bg-neutral-50 hover:border-neutral-200 shadow-inner'
+            }`}
+          >
+            <input 
+              type="file" 
+              multiple 
+              className="absolute inset-0 opacity-0 cursor-pointer" 
+              onChange={(e) => handleFiles(e.target.files)}
+            />
+            <div className={`p-4 rounded-2xl transition-all ${isDragging ? 'bg-indigo-600 text-white scale-110' : 'bg-white text-neutral-400 group-hover:text-indigo-600 shadow-md group-hover:shadow-indigo-100'}`}>
+              <FileUp className="w-8 h-8" />
+            </div>
+            <div className="text-center">
+              <p className="text-lg font-black text-neutral-900 mb-1">Suelta tus archivos aquí</p>
+              <p className="text-sm text-neutral-500 font-bold uppercase tracking-tighter">Excel, PDF, Documentos e Imágenes</p>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center px-2">
+            <span className="text-sm font-black text-neutral-400 uppercase tracking-widest">{data.files.length} Archivos en biblioteca</span>
+            <button onClick={addFileByUrl} className="text-xs font-black text-indigo-600 hover:underline uppercase tracking-widest">
+              + Añadir por URL
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            {data.files.map((f: any, i: number) => (
+              <div key={i} className="flex items-center justify-between p-4 bg-neutral-50 rounded-2xl border border-neutral-100 group hover:border-indigo-100 transition-all">
+                <div className="flex items-center gap-4 min-w-0">
+                  <div className="w-12 h-12 rounded-xl bg-white border border-neutral-200 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    {f.type === 'pdf' && <FileText className="w-6 h-6 text-red-500" />}
+                    {f.type === 'excel' && <FileSpreadsheet className="w-6 h-6 text-emerald-500" />}
+                    {f.type === 'image' && <ImageIcon className="w-6 h-6 text-indigo-500" />}
+                    {(f.type === 'video' || f.type === 'link') && <LinkIcon className="w-6 h-6 text-amber-500" />}
+                  </div>
+                  <div className="truncate">
+                    <p className="text-sm font-black text-neutral-900 truncate">{f.name}</p>
+                    <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-widest">{f.type === 'link' ? 'Vínculo Externo' : f.type}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a 
+                    href={f.url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="p-2 text-neutral-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                    title="Previsualizar"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </a>
+                  <button 
+                    onClick={() => {
+                      const link = document.createElement('a');
+                      link.href = f.url;
+                      link.download = f.name;
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                    }}
+                    className="p-2 text-neutral-400 hover:text-emerald-600 hover:bg-white rounded-xl transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                    title="Descargar"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => removeFile(i)}
+                    className="p-2 text-neutral-300 hover:text-red-500 hover:bg-white rounded-xl transition-all shadow-sm opacity-0 group-hover:opacity-100"
+                    title="Eliminar"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-8 flex gap-4 pt-6 border-t border-neutral-100">
+          <button 
+            onClick={onClose}
+            className="flex-1 py-4 text-neutral-500 font-black uppercase tracking-widest hover:bg-neutral-50 rounded-2xl transition-all"
+          >
+            Cancelar
+          </button>
+          <button 
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex-[2] py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 disabled:opacity-50"
+          >
+            {isSaving ? 'Guardando...' : 'Guardar Cambios'}
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }

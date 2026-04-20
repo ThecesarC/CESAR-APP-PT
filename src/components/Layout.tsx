@@ -20,7 +20,7 @@ const ICON_MAP: Record<string, any> = {
 export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings, registrations, sections, userProfile, refreshCount } = useGlobalState();
+  const { settings, registrations, sections, userProfile, refreshCount, users } = useGlobalState();
   
   const [appIcon, setAppIcon] = React.useState('Shield');
   const [logoUrl, setLogoUrl] = React.useState('https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg');
@@ -42,20 +42,41 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
     }
   }, [settings]);
 
-  // User-specific progress calculation
+  // User/Admin progress calculation
   const assignedSectionIds = (userProfile?.assignedSections || []);
-  
-  // Filter only those that actually exist in the current sections catalog
   const actualAssignedIds = assignedSectionIds.filter(id => sections.some(s => s.id === id));
-  const mySections = sections.filter(s => actualAssignedIds.includes(s.id));
   
-  const myTotalCasillasCount = mySections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
-  
-  // Filter registrations: Must be in my assigned sections AND made by ME
-  const myRegistrationCount = registrations.filter(r => 
-    actualAssignedIds.includes(r.sectionId) && 
-    r.responsibleId === (userProfile?.id || user?.uid)
-  ).length;
+  let myRegistrationCount = 0;
+  let myTotalCasillasCount = 0;
+
+  if (isAdmin) {
+    // Global progress calculation: Any unique casilla covered in the entire catalogue
+    myTotalCasillasCount = sections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+    
+    // Count UNIQUE casillas covered across all registrations in known sections
+    const uniqueCovered = new Set(
+      registrations
+        .filter(r => r.sectionId && sections.some(s => s.id === r.sectionId))
+        .map(r => `${r.sectionId}-${r.casilla}`)
+    );
+    myRegistrationCount = uniqueCovered.size;
+  } else {
+    // User progress
+    const mySections = sections.filter(s => actualAssignedIds.includes(s.id));
+    myTotalCasillasCount = mySections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+    
+    // Count UNIQUE casillas covered for this user
+    const myUniqueCovered = new Set(
+      registrations
+        .filter(r => 
+          r.sectionId &&
+          actualAssignedIds.includes(r.sectionId) && 
+          r.responsibleId === (userProfile?.id || user?.uid)
+        )
+        .map(r => `${r.sectionId}-${r.casilla}`)
+    );
+    myRegistrationCount = myUniqueCovered.size;
+  }
 
   const progressPercentage = myTotalCasillasCount > 0 
     ? Math.min((myRegistrationCount / myTotalCasillasCount) * 100, 100).toFixed(2)
@@ -132,7 +153,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
           </button>
           
           <div className="flex items-center gap-3 md:gap-6">
-            {(headerLayout || []).map(item => (
+            {Array.from(new Set(headerLayout || [])).map(item => (
               <React.Fragment key={item}>
                 {item === 'logo' && (
                   logoUrl ? (
@@ -235,7 +256,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               <div className="mb-6 p-4 bg-red-50 rounded-2xl border border-red-100">
                 <div className="flex justify-between items-end mb-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-red-600 uppercase tracking-wider">Avance de Secciones</span>
+                    <span className="text-[10px] font-black text-red-600 uppercase tracking-widest">{isAdmin ? 'Avance Global' : 'Avance de Secciones'}</span>
                     <button 
                       onClick={async () => {
                         const toastId = toast.loading('Sincronizando...');
@@ -268,7 +289,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               </div>
 
               <div className="flex flex-col gap-2">
-                {(sidebarOrder || []).map((itemKey) => {
+                {Array.from(new Set(sidebarOrder || [])).map((itemKey) => {
                   const item = navItems.find(n => {
                     if (itemKey === 'dashboard') return n.path === '/';
                     if (itemKey === 'sections') return n.path === '/sections';
@@ -346,7 +367,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
           <div className="mb-4 p-4 bg-red-50 rounded-2xl border border-red-100">
             <div className="flex justify-between items-end mb-2">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">Avance Total</span>
+                <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider">{isAdmin ? 'Avance Global' : 'Avance Total'}</span>
                 <button 
                   onClick={async () => {
                     try {
@@ -378,7 +399,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             )}
           </div>
 
-          {(sidebarOrder || []).map((itemKey) => {
+          {Array.from(new Set(sidebarOrder || [])).map((itemKey) => {
             const item = navItems.find(n => {
               if (itemKey === 'dashboard') return n.path === '/';
               if (itemKey === 'sections') return n.path === '/sections';

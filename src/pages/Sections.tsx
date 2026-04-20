@@ -1,19 +1,32 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useGlobalState } from '../contexts/GlobalStateContext';
-import { Search, ChevronRight, LayoutGrid, AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Search, ChevronRight, LayoutGrid, AlertCircle, Clock, CheckCircle2, FileText, User as UserIcon, Filter, Users, Phone } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Sections() {
   const [searchTerm, setSearchTerm] = useState('');
-  const { sections, registrations, userProfile } = useGlobalState();
+  const [userFilter, setUserFilter] = useState('all');
+  const { sections, registrations, userProfile, users } = useGlobalState();
+  const isAdmin = userProfile?.role === 'admin';
 
-  // Filter sections based on user profile assignedSections
-  const mySections = sections.filter(s => 
-    (userProfile?.assignedSections || []).includes(s.id)
-  );
+  // Determine which sections to show
+  let displaySections = [];
+  if (isAdmin) {
+    if (userFilter === 'all') {
+      displaySections = sections;
+    } else {
+      const selectedUser = users.find(u => u.id === userFilter);
+      const assignedIds = selectedUser?.assignedSections || [];
+      displaySections = sections.filter(s => assignedIds.includes(s.id));
+    }
+  } else {
+    displaySections = sections.filter(s => 
+      (userProfile?.assignedSections || []).includes(s.id)
+    );
+  }
 
-  const filteredSections = mySections.filter(section => 
+  const filteredSections = displaySections.filter(section => 
     String(section.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -37,149 +50,246 @@ export default function Sections() {
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100">
             <LayoutGrid className="text-white w-6 h-6" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-neutral-900">Mis Secciones Asignadas</h2>
-            <p className="text-neutral-500 text-sm">Gestiona y visualiza el avance de tus territorios.</p>
+            <h2 className="text-2xl font-bold text-neutral-900">
+              {isAdmin ? 'Catálogo General de Secciones' : 'Mis Secciones Asignadas'}
+            </h2>
+            <p className="text-neutral-500 text-sm">
+              {isAdmin 
+                ? 'Monitorea el avance de todos los coordinadores y sus territorios.' 
+                : 'Gestiona y visualiza el avance de tus territorios.'}
+            </p>
           </div>
         </div>
 
-        <div className="relative max-w-md w-full">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Buscar por número de sección..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3.5 rounded-2xl border border-neutral-200 focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all outline-none bg-white font-medium"
-          />
+        <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
+          {isAdmin && (
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400 w-4 h-4" />
+              <select
+                value={userFilter}
+                onChange={(e) => setUserFilter(e.target.value)}
+                className="w-full sm:w-64 pl-10 pr-4 py-3 rounded-xl border border-neutral-200 focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all outline-none bg-white font-bold text-xs uppercase tracking-widest appearance-none cursor-pointer"
+              >
+                <option value="all">TODOS LOS COORDINADORES</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.displayName?.toUpperCase() || u.email?.toUpperCase()}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="relative flex-1 sm:w-72">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Buscar sección..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-12 pr-4 py-3 rounded-xl border border-neutral-200 focus:ring-4 focus:ring-indigo-50 focus:border-indigo-500 transition-all outline-none bg-white font-medium shadow-sm"
+            />
+          </div>
         </div>
       </div>
 
+      {isAdmin && userFilter === 'all' && (
+        <div className="flex flex-wrap gap-3">
+          <div className="bg-indigo-50 border border-indigo-100 px-4 py-2 rounded-xl flex items-center gap-2">
+            <Users className="w-4 h-4 text-indigo-600" />
+            <span className="text-xs font-bold text-indigo-700">{sections.length} Secciones Totales</span>
+          </div>
+          <div className="bg-emerald-50 border border-emerald-100 px-4 py-2 rounded-xl flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+            <span className="text-xs font-bold text-emerald-700">
+              {sections.filter(s => {
+                const sRegs = registrations.filter(r => r.sectionId === s.id);
+                return sRegs.length >= (s.casillas?.length || 1);
+              }).length} Completas
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredSections.map((section) => {
-          const sectionRegs = registrations.filter(r => r.sectionId === section.id);
-          const totalCasillas = section.casillas?.length || 1;
-          const registeredCasillas = sectionRegs.length;
-          const progressPercent = Math.min(Math.round((registeredCasillas / totalCasillas) * 100), 100);
-          
-          const colorClasses = getProgressColor(progressPercent);
-          const bgClass = getProgressBg(progressPercent);
-          const icon = getProgressIcon(progressPercent);
+        <AnimatePresence mode="popLayout">
+          {filteredSections.map((section) => {
+            const sectionRegs = registrations.filter(r => r.sectionId === section.id);
+            const totalCasillas = section.casillas?.length || 1;
+            
+            // Use unique casilla logic for accurate percentages
+            const uniqueRegistered = new Set(sectionRegs.map(r => r.casilla)).size;
+            const progressPercent = Math.min(Math.round((uniqueRegistered / totalCasillas) * 100), 100);
+            
+            const colorClasses = getProgressColor(progressPercent);
+            const bgClass = getProgressBg(progressPercent);
+            const icon = getProgressIcon(progressPercent);
 
-          return (
-            <motion.div
-              layout
-              key={section.id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-            >
-              <Link
-                to={`/sections/${section.id}`}
-                className="group block bg-white rounded-[2.5rem] p-6 border border-neutral-100 shadow-sm hover:shadow-xl hover:shadow-indigo-50 hover:-translate-y-1 transition-all duration-300"
+            // Find assigned users for this section (Admin only)
+            const assignedUsers = isAdmin 
+              ? users.filter(u => (u.assignedSections || []).includes(section.id))
+              : [];
+
+            return (
+              <motion.div
+                layout
+                key={section.id}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ duration: 0.2 }}
               >
-                <div className="flex justify-between items-start mb-6">
-                  <div className={`p-4 rounded-3xl border transition-all ${colorClasses}`}>
-                    {icon}
-                  </div>
-                  <div className="flex flex-col items-end">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-1">Avance</span>
-                    <span className={`text-2xl font-black ${colorClasses.split(' ')[0]}`}>{progressPercent}%</span>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors">
-                      Sección {section.name}
-                    </h3>
-                    <p className="text-neutral-500 text-sm line-clamp-1">{section.description || 'Sin descripción detallada'}</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-neutral-500">
-                      <span>Casillas Cubiertas</span>
-                      <span className="text-neutral-900">{registeredCasillas} / {totalCasillas}</span>
+                <Link
+                  to={`/sections/${section.id}`}
+                  className="group block bg-white rounded-[2.5rem] p-6 border border-neutral-100 shadow-sm hover:shadow-xl hover:shadow-indigo-50 hover:-translate-y-1 transition-all duration-300 relative overflow-hidden"
+                >
+                  {isAdmin && assignedUsers.length > 0 && (
+                    <div className="absolute top-0 right-0 p-3">
+                      <div className="flex -space-x-2">
+                        {assignedUsers.slice(0, 2).map((u, i) => (
+                          <div 
+                            key={u.id} 
+                            className="w-6 h-6 rounded-full border-2 border-white bg-indigo-500 text-[8px] font-black text-white flex items-center justify-center uppercase"
+                            title={`Asignado a: ${u.displayName || u.email}`}
+                          >
+                            {u.displayName?.[0] || 'U'}
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                    <div className="w-full h-2.5 bg-neutral-100 rounded-full overflow-hidden p-0.5">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progressPercent}%` }}
-                        transition={{ duration: 1, ease: "easeOut" }}
-                        className={`h-full rounded-full ${bgClass} shadow-sm`}
-                      />
+                  )}
+
+                  <div className="flex justify-between items-start mb-6">
+                    <div className={`p-4 rounded-3xl border transition-all ${colorClasses}`}>
+                      {icon}
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-1">Avance</span>
+                      <span className={`text-2xl font-black ${colorClasses.split(' ')[0]}`}>{progressPercent}%</span>
                     </div>
                   </div>
 
-                  {/* Casilla Status Grid */}
-                  <div className="flex flex-wrap gap-1.5 pt-2">
-                    {(section.casillas || ['Único']).map((c: string) => {
-                      const isC = sectionRegs.some(r => r.casilla === c);
-                      const regData = sectionRegs.find(r => r.casilla === c);
-                      return (
-                        <div 
-                          key={c} 
-                          className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase tracking-wider border-2 transition-all group/casilla relative ${
-                            isC 
-                              ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
-                              : 'bg-red-50 border-red-100 text-red-500 opacity-60'
-                          }`}
-                        >
-                          {c}
-                          {isC && (
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 text-white text-[10px] rounded-xl opacity-0 group-hover/casilla:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl z-10">
-                              <p className="font-black text-white">{regData?.personName}</p>
-                              <p className="font-bold text-neutral-400">{regData?.phoneNumber}</p>
-                              <div className="w-2 h-2 bg-neutral-900 absolute -bottom-1 left-1/2 -translate-x-1/2 rotate-45" />
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="text-xl font-bold text-neutral-900 group-hover:text-indigo-600 transition-colors flex items-center gap-2">
+                        Sección {section.name}
+                        {section.files && section.files.length > 0 && (
+                          <FileText className="w-4 h-4 text-indigo-400" />
+                        )}
+                      </h3>
+                      {isAdmin && assignedUsers.length > 0 && (
+                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-1 mb-2 flex items-center gap-1">
+                          <UserIcon className="w-3 h-3" />
+                          {assignedUsers.map(u => u.displayName || u.email).join(', ')}
+                        </p>
+                      )}
+                      <p className="text-neutral-500 text-sm line-clamp-1">{section.description || 'Sin descripción detallada'}</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                        <span>Casillas Cubiertas</span>
+                        <span className="text-neutral-900 font-black">{uniqueRegistered} / {totalCasillas}</span>
+                      </div>
+                      <div className="relative w-full h-3 bg-neutral-100 rounded-full overflow-hidden p-0.5 border border-neutral-50">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${progressPercent}%` }}
+                          transition={{ duration: 1, ease: "easeOut" }}
+                          className={`h-full rounded-full ${bgClass} shadow-sm group-hover:shadow-[0_0_10px_rgba(79,70,229,0.3)] transition-all`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Casilla Status Grid - More visible for Admin */}
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Estado por Casilla</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(section.casillas || ['Único']).map((c: string, idx: number) => {
+                          const regData = sectionRegs.find(r => r.casilla === c);
+                          const isC = !!regData;
+                          return (
+                            <div 
+                              key={`${section.id}-${c}-${idx}`} 
+                              className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border-2 transition-all group/casilla relative flex items-center gap-2 ${
+                                isC 
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm' 
+                                  : 'bg-red-50 border-red-200 text-red-500 opacity-60'
+                              }`}
+                            >
+                              {c}
+                              {isC && (
+                                <>
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 px-4 py-3 bg-neutral-900 border border-white/10 text-white rounded-2xl opacity-0 group-hover/casilla:opacity-100 transition-all scale-95 group-hover/casilla:scale-100 whitespace-nowrap pointer-events-none shadow-2xl z-20">
+                                    <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Responsable de Casilla</p>
+                                    <p className="text-sm font-black text-white mb-1">{regData?.personName}</p>
+                                    <div className="flex items-center gap-3">
+                                      <p className="text-xs font-bold text-neutral-400 flex items-center gap-1">
+                                        <Phone className="w-3 h-3" />
+                                        {regData?.phoneNumber}
+                                      </p>
+                                    </div>
+                                    <div className="mt-2 pt-2 border-t border-white/10">
+                                      <p className="text-[8px] font-black text-neutral-500 uppercase">Registrado por: {regData?.responsibleEmail}</p>
+                                    </div>
+                                    <div className="w-3 h-3 bg-neutral-900 border-r border-b border-white/10 absolute -bottom-1.5 left-1/2 -translate-x-1/2 rotate-45" />
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 flex items-center justify-between border-t border-neutral-100">
+                      <div className="flex items-center gap-3">
+                        <div className="flex -space-x-2">
+                          {sectionRegs.slice(0, 3).map((reg, i) => (
+                            <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">
+                              {reg.personName?.[0] || 'U'}
+                            </div>
+                          ))}
+                          {sectionRegs.length > 3 && (
+                            <div className="w-8 h-8 rounded-full border-2 border-white bg-neutral-100 flex items-center justify-center text-[10px] font-bold text-neutral-600">
+                              +{sectionRegs.length - 3}
                             </div>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="pt-4 flex items-center justify-between border-t border-neutral-50">
-                    <div className="flex -space-x-2">
-                      {sectionRegs.slice(0, 3).map((reg, i) => (
-                        <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">
-                          {reg.personName?.[0] || 'U'}
-                        </div>
-                      ))}
-                      {sectionRegs.length > 3 && (
-                        <div className="w-8 h-8 rounded-full border-2 border-white bg-neutral-100 flex items-center justify-center text-[10px] font-bold text-neutral-600">
-                          +{sectionRegs.length - 3}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 group-hover:translate-x-1 transition-transform">
-                      Ver Detalles
-                      <ChevronRight className="w-4 h-4" />
+                        {sectionRegs.length > 0 && (
+                          <span className="text-[10px] font-bold text-neutral-500">{sectionRegs.length} capturas</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs font-black uppercase tracking-widest text-indigo-600 group-hover:translate-x-1 transition-transform">
+                        Detalles
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              </Link>
-            </motion.div>
-          );
-        })}
+                </Link>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
       </div>
 
-      {mySections.length === 0 && (
+      {filteredSections.length === 0 && (
         <div className="text-center py-32 bg-white rounded-[3rem] border border-dashed border-neutral-200">
           <div className="bg-neutral-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
             <LayoutGrid className="text-neutral-300 w-10 h-10" />
           </div>
-          <h3 className="text-xl font-bold text-neutral-900 mb-2">No tienes secciones asignadas</h3>
-          <p className="text-neutral-500 max-w-sm mx-auto">Contacta al administrador para que te asigne territorios y puedas comenzar con el registro.</p>
-        </div>
-      )}
-
-      {mySections.length > 0 && filteredSections.length === 0 && (
-        <div className="text-center py-20">
-          <p className="text-neutral-400 text-lg">No se encontraron secciones que coincidan con tu búsqueda.</p>
+          <h3 className="text-xl font-bold text-neutral-900 mb-2">
+            {isAdmin ? 'No hay secciones que coincidan' : 'No tienes secciones asignadas'}
+          </h3>
+          <p className="text-neutral-500 max-w-sm mx-auto">
+            {isAdmin 
+              ? 'Intenta cambiar el filtro de coordinador o el término de búsqueda.' 
+              : 'Contacta al administrador para que te asigne territorios y puedas comenzar con el registro.'}
+          </p>
         </div>
       )}
     </div>

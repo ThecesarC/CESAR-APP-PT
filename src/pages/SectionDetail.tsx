@@ -85,7 +85,9 @@ export default function SectionDetail() {
             </div>
             <div className="text-center px-4">
               <span className="block text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-1">Responsables</span>
-              <span className="text-2xl font-black text-emerald-600">{registrations.length}</span>
+              <span className="text-2xl font-black text-emerald-600">
+                {new Set(registrations.map(r => r.casilla)).size}
+              </span>
             </div>
           </div>
         </div>
@@ -99,13 +101,13 @@ export default function SectionDetail() {
             </h3>
             
             <div className="grid grid-cols-1 gap-4">
-              {(section.casillas || ['Única']).map((casillaName: string) => {
+              {(section.casillas || ['Única']).map((casillaName: string, idx: number) => {
                 const reg = regsByCasilla[casillaName];
                 const isCovered = !!reg;
 
                 return (
                   <motion.div 
-                    key={casillaName}
+                    key={`${casillaName}-${idx}`}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     className={`relative p-6 rounded-[2rem] border-2 transition-all overflow-hidden ${

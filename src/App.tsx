@@ -96,7 +96,9 @@ export default function App() {
     };
   }, []);
 
-  const isAdmin = userData?.role === 'admin' || user?.email === 'hugocesarlemuscortes@gmail.com';
+  const isAdmin = userData?.role === 'admin' || 
+    user?.email === 'hugocesarlemuscortes@gmail.com' || 
+    user?.email === 'bunkerhrv@gmail.com';
 
   if (loading) {
     return (

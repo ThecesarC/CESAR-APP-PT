@@ -24,16 +24,41 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
     ? sections 
     : sections.filter(s => (userProfile?.assignedSections || []).includes(s.id));
 
-  // User-specific progress calculation
-  const assignedSectionIds = (userProfile?.assignedSections || []);
-  const actualAssignedIds = assignedSectionIds.filter(id => sections.some(s => s.id === id));
-  const mySections = sections.filter(s => actualAssignedIds.includes(s.id));
-  
-  const myTotalCasillasCount = mySections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
-  const myRegistrationCount = registrations.filter(r => 
-    actualAssignedIds.includes(r.sectionId) && 
-    r.responsibleId === (userProfile?.id || user?.uid)
-  ).length;
+  // Calculate progress
+  let myTotalCasillasCount = 0;
+  let myRegistrationCount = 0;
+
+  if (isAdmin) {
+    // Global progress calculation: Any unique casilla covered in the entire catalogue
+    myTotalCasillasCount = sections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+    
+    // Count UNIQUE casillas covered across all registrations in known sections
+    const uniqueCovered = new Set(
+      registrations
+        .filter(r => r.sectionId && sections.some(s => s.id === r.sectionId))
+        .map(r => `${r.sectionId}-${r.casilla}`)
+    );
+    myRegistrationCount = uniqueCovered.size;
+  } else {
+    // User-specific progress calculation
+    const assignedSectionIds = (userProfile?.assignedSections || []);
+    const actualAssignedIds = assignedSectionIds.filter(id => sections.some(s => s.id === id));
+    const mySections = sections.filter(s => actualAssignedIds.includes(s.id));
+    
+    myTotalCasillasCount = mySections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+    
+    // Count UNIQUE casillas covered for this user
+    const myUniqueCovered = new Set(
+      registrations
+        .filter(r => 
+          r.sectionId &&
+          actualAssignedIds.includes(r.sectionId) && 
+          r.responsibleId === (userProfile?.id || user?.uid)
+        )
+        .map(r => `${r.sectionId}-${r.casilla}`)
+    );
+    myRegistrationCount = myUniqueCovered.size;
+  }
 
   const progressPercentage = myTotalCasillasCount > 0 
     ? Math.min((myRegistrationCount / myTotalCasillasCount) * 100, 100).toFixed(2)
@@ -151,7 +176,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
   return (
     <div className="space-y-8">
-      {(dashboardOrder || []).map((item) => (
+      {Array.from(new Set(dashboardOrder || [])).map((item) => (
         <React.Fragment key={item}>
           {item === 'welcome' && (
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

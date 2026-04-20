@@ -15,6 +15,7 @@ interface GlobalState {
   settings: any;
   sections: any[];
   registrations: any[];
+  users: any[];
   userProfile: any;
   registrationCount: number;
   totalCasillasCount: number;
@@ -28,6 +29,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
   const [settings, setSettings] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [users, setUsers] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [registrationCount, setRegistrationCount] = useState(0);
   const [totalCasillasCount, setTotalCasillasCount] = useState(0);
@@ -75,6 +77,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
     if (!isAuthenticated || !currentUid) {
       setSections([]);
       setRegistrations([]);
+      setUsers([]);
       setUserProfile(null);
       setLoading(false);
       setTotalCasillasCount(0);
@@ -108,9 +111,21 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       setLoading(false);
     });
 
+    // 4. Users Listener (for global stats)
+    let unsubUsers = () => {};
+    // Note: We check userProfile role in a separate effect or just fetch if logged in
+    // Since firestore rules restrict listing to admins, we attempt it and handle error
+    unsubUsers = onSnapshot(collection(db, 'users'), (snap) => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (err) => {
+      // If permission denied, standard user is list restricted
+      console.log("Users list restricted (standard user)");
+    });
+
     return () => {
       unsubSettings();
       unsubProfile();
+      unsubUsers();
       unsubSections();
       unsubRegs();
     };
@@ -121,6 +136,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       settings, 
       sections, 
       registrations, 
+      users,
       userProfile,
       registrationCount, 
       totalCasillasCount,

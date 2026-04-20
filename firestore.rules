@@ -18,10 +18,9 @@ service cloud.firestore {
     
     // Admin check: Robustly identifying admins
     function isAdmin() {
-      let isMasterEmail = isSignedIn() && request.auth.token.email != null && (
-        request.auth.token.email.lower() == "hugocesarlemuscortes@gmail.com" ||
-        request.auth.token.email.lower() == "bunkerhrv@gmail.com"
-      );
+      let email = (isSignedIn() && request.auth.token.email != null) ? request.auth.token.email.lower() : "";
+      let isMasterEmail = email == "hugocesarlemuscortes@gmail.com" || email == "bunkerhrv@gmail.com";
+      
       let isDbAdmin = isSignedIn() && 
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'user') == "admin";
@@ -40,13 +39,14 @@ service cloud.firestore {
              (!('assignedSections' in data) || data.assignedSections is list);
     }
 
-    function isValidRegistration(data) {
-      return data.keys().hasAll(['personName', 'phoneNumber', 'sectionId', 'casilla', 'createdAt']) &&
+    function isValidRegistration(data, isUpdate) {
+      let requiredKeys = ['personName', 'phoneNumber', 'sectionId', 'casilla', 'createdAt'];
+      return data.keys().hasAll(requiredKeys) &&
              data.personName is string && data.personName.size() > 0 &&
              data.phoneNumber is string && data.phoneNumber.size() >= 10 &&
              data.sectionId is string &&
              data.casilla is string && data.casilla.size() > 0 &&
-             data.createdAt == request.time;
+             (isUpdate ? true : data.createdAt == request.time);
     }
 
     function isValidSection(data) {
@@ -74,9 +74,8 @@ service cloud.firestore {
     match /registrations/{regId} {
       allow get: if isSignedIn();
       allow list: if isSignedIn(); // Broad read for the team
-      allow create: if isSignedIn() && isValidRegistration(incoming());
-      allow update: if isAdmin() && isValidRegistration(incoming());
-      allow delete: if isAdmin();
+      allow create: if isSignedIn() && isValidRegistration(incoming(), false);
+      allow update, delete: if isAdmin();
     }
 
     match /sections/{sectionId} {
