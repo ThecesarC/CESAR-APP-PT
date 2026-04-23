@@ -90,7 +90,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1200;
+        const MAX_WIDTH = 1000; // Reduced from 1200 to stay safely under 1MB base64 limit
         let width = img.width;
         let height = img.height;
 
@@ -104,7 +104,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
         
-        const base64 = canvas.toDataURL('image/jpeg', 0.8);
+        const base64 = canvas.toDataURL('image/jpeg', 0.7); // Quality reduced slightly for safety
         if (side === 'front') setIneFront(base64);
         else setIneBack(base64);
       };
@@ -115,6 +115,12 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!user) {
+      toast.error('Sesión no válida. Por favor recarga la página.');
+      return;
+    }
+
     if (!personName || !sectionId || !phoneNumber || !casilla) {
       toast.error('Por favor completa los campos obligatorios');
       return;
@@ -125,10 +131,20 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       return;
     }
 
+    if (phoneNumber.length < 10) {
+      toast.error('El número de teléfono debe tener 10 dígitos exactos');
+      return;
+    }
+
     setLoading(true);
     const section = sections.find(s => s.id === sectionId);
+    const trimmedPersonName = personName.trim();
+    let toastId: string | number | undefined;
 
     try {
+      console.log("Iniciando validación de duplicados...");
+      toastId = toast.loading('Verificando disponibilidad...');
+      
       // Check if this specific casilla in this section already has a responsible
       const q = query(
         collection(db, 'registrations'),
@@ -141,13 +157,16 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       
       if (!querySnapshot.empty) {
         const existingData = querySnapshot.docs[0].data();
-        toast.error(`Esta casilla ya cuenta con un responsable: ${existingData.personName}`);
+        toast.error(`Esta casilla ya cuenta con un responsable: ${existingData.personName}`, { id: toastId });
         setLoading(false);
         return;
       }
 
+      toast.loading('Enviando registro y fotos...', { id: toastId });
+      console.log("Guardando registro en Firestore...");
+      
       await addDoc(collection(db, 'registrations'), {
-        personName,
+        personName: trimmedPersonName,
         phoneNumber,
         ineFrontUrl: ineFront,
         ineBackUrl: ineBack,
@@ -155,20 +174,38 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
         sectionName: section?.name || 'Desconocida',
         casilla,
         responsibleId: user.uid,
-        responsibleEmail: user.email,
+        responsibleEmail: user.email || 'sin-email@bunker.com',
         createdAt: serverTimestamp()
       });
 
-      toast.success('Registro exitoso');
+      console.log("Registro exitoso");
+      toast.success('Registro completado con éxito', { id: toastId });
       setPersonName('');
       setPhoneNumber('');
       setIneFront(null);
       setIneBack(null);
       setSectionId('');
       setCasilla('');
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, 'registrations');
-      toast.error('Error al guardar el registro');
+    } catch (error: any) {
+      console.error("Error completo de registro:", error);
+      const errorMsg = error.message || 'Error desconocido';
+      
+      let finalMsg = `Error al guardar: ${errorMsg}`;
+      if (errorMsg.includes('permission')) {
+        finalMsg = 'No tienes permisos suficientes para registrar en esta sección.';
+      } else if (errorMsg.includes('quota')) {
+        finalMsg = 'Límite de almacenamiento alcanzado (Quota).';
+      } else if (errorMsg.includes('size')) {
+        finalMsg = 'Las imágenes son demasiado pesadas. Intenta con fotos más pequeñas.';
+      }
+      
+      toast.error(finalMsg, { id: toastId });
+      
+      try {
+        handleFirestoreError(error, OperationType.CREATE, 'registrations');
+      } catch (err) {
+        // Ignorar el re-throw para que el spinner se detenga en finalmente
+      }
     } finally {
       setLoading(false);
     }
@@ -276,11 +313,15 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                     <input
                       type="tel"
                       value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      placeholder="Ej. 4431234567"
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, ''); // Solo números
+                        if (val.length <= 10) setPhoneNumber(val);
+                      }}
+                      placeholder="10 dígitos (Ej. 4431234567)"
                       required
                       className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
                     />
+                    <p className="text-[9px] text-neutral-400 mt-1 italic">Ingresa los 10 dígitos sin espacios ni guiones.</p>
                   </div>
 
                   <div>
