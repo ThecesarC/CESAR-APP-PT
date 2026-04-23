@@ -26,10 +26,28 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const [logoUrl, setLogoUrl] = React.useState('https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg');
   const [mapUrl, setMapUrl] = React.useState('https://i.postimg.cc/0j64X30q/MAPA-HUGO-RANGEL.jpg');
   const [mapEmbedUrl, setMapEmbedUrl] = React.useState('https://www.google.com/maps/d/embed?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ');
-  const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'admin']);
+  const [sidebarOrder, setSidebarOrder] = React.useState(['dashboard', 'sections', 'evidence', 'admin']);
   const [headerLayout, setHeaderLayout] = React.useState(['logo', 'title', 'user']);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const [isLoggingOut, setIsLoggingOut] = React.useState(false);
+
+  // Ensure sections and evidence are always present even if DB settings are old
+  const displaySidebarOrder = React.useMemo(() => {
+    const order = [...sidebarOrder];
+    if (!order.includes('sections')) {
+      // Insert after dashboard if possible
+      const dashboardIdx = order.indexOf('dashboard');
+      if (dashboardIdx !== -1) order.splice(dashboardIdx + 1, 0, 'sections');
+      else order.push('sections');
+    }
+    if (!order.includes('evidence')) {
+      // Insert after sections if possible
+      const sectionsIdx = order.indexOf('sections');
+      if (sectionsIdx !== -1) order.splice(sectionsIdx + 1, 0, 'evidence');
+      else order.push('evidence');
+    }
+    return Array.from(new Set(order));
+  }, [sidebarOrder]);
 
   React.useEffect(() => {
     if (settings) {
@@ -102,6 +120,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const navItems = [
     { name: 'Panel de Registro', path: '/', icon: LayoutDashboard },
     { name: 'Mis Secciones', path: '/sections', icon: List },
+    { name: 'Subir Evidencia', path: '/evidence', icon: FileText },
   ];
 
   if (isAdmin) {
@@ -289,10 +308,11 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               </div>
 
               <div className="flex flex-col gap-2">
-                {Array.from(new Set(sidebarOrder || [])).map((itemKey) => {
+                {displaySidebarOrder.map((itemKey) => {
                   const item = navItems.find(n => {
                     if (itemKey === 'dashboard') return n.path === '/';
                     if (itemKey === 'sections') return n.path === '/sections';
+                    if (itemKey === 'evidence') return n.path === '/evidence';
                     if (itemKey === 'admin') return n.path === '/admin';
                     return false;
                   });
@@ -399,10 +419,11 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             )}
           </div>
 
-          {Array.from(new Set(sidebarOrder || [])).map((itemKey) => {
+          {displaySidebarOrder.map((itemKey) => {
             const item = navItems.find(n => {
               if (itemKey === 'dashboard') return n.path === '/';
               if (itemKey === 'sections') return n.path === '/sections';
+              if (itemKey === 'evidence') return n.path === '/evidence';
               if (itemKey === 'admin') return n.path === '/admin';
               return false;
             });

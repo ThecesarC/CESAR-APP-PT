@@ -17,6 +17,7 @@ import Dashboard from './pages/Dashboard';
 import Sections from './pages/Sections';
 import SectionDetail from './pages/SectionDetail';
 import Admin from './pages/Admin';
+import Evidence from './pages/Evidence';
 import Layout from './components/Layout';
 import ThemeProvider from './components/ThemeProvider';
 
@@ -167,6 +168,19 @@ export default function App() {
                 </Layout>
               ) : (
                 <Navigate to="/" />
+              )
+            } 
+          />
+
+          <Route 
+            path="/evidence" 
+            element={
+              user ? (
+                <Layout user={user} isAdmin={isAdmin}>
+                  <Evidence />
+                </Layout>
+              ) : (
+                <Navigate to="/login" />
               )
             } 
           />

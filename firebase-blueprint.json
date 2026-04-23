@@ -68,14 +68,34 @@
       "properties": {
         "primaryColor": { "type": "string" },
         "backgroundColor": { "type": "string" },
-        "fontFamily": { "type": "string" }
+        "fontFamily": { "type": "string" },
+        "evidenceEnabled": { "type": "boolean" },
+        "evidenceStartDate": { "type": "string" },
+        "evidenceEndDate": { "type": "string" }
       }
+    },
+    "Evidence": {
+      "title": "Evidence",
+      "description": "Capturas de pantalla subidas por los usuarios",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "periodStart": { "type": "string", "description": "Fecha de inicio del periodo en que se subió" },
+        "periodEnd": { "type": "string", "description": "Fecha de fin del periodo en que se subió" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "feedback": { "type": "string" }
+      },
+      "required": ["userId", "imageUrl", "timestamp", "periodStart", "periodEnd", "status"]
     }
   },
   "firestore": {
     "/registrations/{registrationId}": { "schema": "Registration", "description": "Colección de registros de personal" },
     "/users/{userId}": { "schema": "User", "description": "Colección de perfiles de usuario" },
     "/sections/{sectionId}": { "schema": "Section", "description": "Colección dinámica de secciones" },
-    "/settings/global": { "schema": "Settings", "description": "Configuración de la UI" }
+    "/settings/global": { "schema": "Settings", "description": "Configuración de la UI" },
+    "/evidence/{evidenceId}": { "schema": "Evidence", "description": "Evidencias fotográficas" }
   }
 }

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { useGlobalState } from '../contexts/GlobalStateContext';
 import { initializeApp } from 'firebase/app';
 import { firebaseConfig } from '../firebase';
@@ -17,7 +17,7 @@ import {
   FileText, FileSpreadsheet, Image as ImageIcon, Video, Link as LinkIcon,
   Upload, Check, Heart, Star, Zap, Shield, Target, Rocket, Box, Activity,
   Move, ArrowLeft, LayoutDashboard, List, Download, AlertTriangle, ShieldCheck,
-  Eye, Edit
+  Eye, Edit, Camera, Clock, CheckCircle2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -306,6 +306,7 @@ export default function Admin() {
   const [layoutSections, setLayoutSections] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [evidence, setEvidence] = useState<any[]>([]);
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [selectedRegistrations, setSelectedRegistrations] = useState<string[]>([]);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
@@ -313,6 +314,7 @@ export default function Admin() {
   const [showBulkRegDeleteConfirm, setShowBulkRegDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<string | null>(null);
   const [regToDelete, setRegToDelete] = useState<string | null>(null);
+  const [evidenceToDelete, setEvidenceToDelete] = useState<string | null>(null);
   const [isAddingUser, setIsAddingUser] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -841,9 +843,12 @@ export default function Admin() {
     appIcon: 'Shield',
     logoUrl: 'https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg',
     dashboardOrder: ['welcome', 'form', 'activity'],
-    sidebarOrder: ['dashboard', 'admin'],
+    sidebarOrder: ['dashboard', 'sections', 'evidence', 'admin'],
     headerLayout: ['logo', 'title', 'user'],
-    loginOrder: ['icon', 'title', 'description', 'form', 'google', 'footer']
+    loginOrder: ['icon', 'title', 'description', 'form', 'google', 'footer'],
+    evidenceEnabled: true,
+    evidenceStartDate: '',
+    evidenceEndDate: ''
   });
 
   const colorPalette = [
@@ -887,11 +892,17 @@ export default function Admin() {
 
   useEffect(() => {
     if (settings) {
+      const mergedSidebarOrder = Array.from(new Set([
+        ...(settings.sidebarOrder || []),
+        'sections',
+        'evidence'
+      ]));
+
       setUiSettings(prev => ({ 
         ...prev, 
         ...settings,
         dashboardOrder: settings.dashboardOrder || prev.dashboardOrder,
-        sidebarOrder: settings.sidebarOrder || prev.sidebarOrder,
+        sidebarOrder: mergedSidebarOrder,
         headerLayout: settings.headerLayout || prev.headerLayout,
         loginOrder: settings.loginOrder || prev.loginOrder
       }));
@@ -906,8 +917,16 @@ export default function Admin() {
       handleFirestoreError(error, OperationType.LIST, 'users');
     });
 
+    const unsubEvidence = onSnapshot(collection(db, 'evidence'), (snap) => {
+      setEvidence(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Evidence listener error:", error);
+      // Don't throw here to avoid crashing the whole admin panel
+    });
+
     return () => {
       unsubUsers();
+      unsubEvidence();
     };
   }, []);
 
@@ -935,6 +954,43 @@ export default function Admin() {
       toast.success('Usuario eliminado');
     } catch (e) {
       toast.error('Error al eliminar');
+    }
+  };
+
+  const updateEvidenceStatus = async (id: string, status: string) => {
+    try {
+      await updateDoc(doc(db, 'evidence', id), { status });
+      toast.success(status === 'approved' ? 'Evidencia aprobada' : 'Evidencia rechazada');
+    } catch (e) {
+      toast.error('Error al actualizar estado');
+    }
+  };
+
+  const updateEvidenceFeedback = async (id: string, feedback: string) => {
+    try {
+      await updateDoc(doc(db, 'evidence', id), { feedback });
+      toast.success('Retroalimentación guardada');
+    } catch (e) {
+      toast.error('Error al guardar comentario');
+    }
+  };
+
+  const handleDeleteEvidence = async (id: string) => {
+    console.log("Attempting to delete evidence:", id);
+    const toastId = toast.loading('Eliminando evidencia...');
+    try {
+      const docRef = doc(db, 'evidence', id);
+      await deleteDoc(docRef);
+      toast.success('Evidencia eliminada', { id: toastId });
+      setEvidenceToDelete(null);
+    } catch (e: any) {
+      console.error("Full delete evidence error:", e);
+      const errorMessage = e.message || 'Error desconocido';
+      toast.error(`Error al eliminar: ${errorMessage}`, { id: toastId });
+      
+      if (errorMessage.includes('permission')) {
+        console.error("Permission denied for deletion. Current user:", auth.currentUser?.email);
+      }
     }
   };
 
@@ -1277,7 +1333,8 @@ export default function Admin() {
             { id: 'ui', icon: Palette, label: 'Diseño' },
             { id: 'layout', icon: Move, label: 'Vista Previa' },
             { id: 'users', icon: Users, label: 'Usuarios' },
-            { id: 'history', icon: FileSpreadsheet, label: 'Registros' }
+            { id: 'history', icon: FileSpreadsheet, label: 'Registros' },
+            { id: 'evidence', icon: Camera, label: 'Evidencia' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -1446,6 +1503,7 @@ export default function Admin() {
                             <GripVertical className="w-4 h-4 text-neutral-300" />
                             {item === 'dashboard' && 'Panel Principal'}
                             {item === 'sections' && 'Catálogo de Secciones'}
+                            {item === 'evidence' && 'Subir Evidencia'}
                             {item === 'admin' && 'Administración'}
                           </div>
                         </Reorder.Item>
@@ -2200,6 +2258,237 @@ export default function Admin() {
                 onClose={() => setEditingRegistration(null)} 
               />
             )}
+          </div>
+        )}
+
+        {activeTab === 'evidence' && (
+          <div className="p-4 md:p-8 space-y-6">
+            {/* Control Panel */}
+            <div className="bg-white border border-neutral-200 rounded-[2rem] p-6 shadow-sm space-y-6">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-indigo-600 text-white rounded-xl shadow-lg">
+                    <Camera className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-neutral-900">Control de Evidencia</h4>
+                    <p className="text-xs text-neutral-500">Configura la disponibilidad de carga para el equipo.</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-4 bg-neutral-50 px-4 py-2 rounded-2xl border border-neutral-100">
+                    <div className="flex flex-col">
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">Desde</label>
+                      <input 
+                        type="date"
+                        value={uiSettings.evidenceStartDate || ''}
+                        onChange={e => setUiSettings({...uiSettings, evidenceStartDate: e.target.value})}
+                        className="bg-transparent text-xs font-bold text-neutral-700 focus:outline-none"
+                      />
+                    </div>
+                    <div className="w-[1px] h-8 bg-neutral-200" />
+                    <div className="flex flex-col">
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-1">Hasta</label>
+                      <input 
+                        type="date"
+                        value={uiSettings.evidenceEndDate || ''}
+                        onChange={e => setUiSettings({...uiSettings, evidenceEndDate: e.target.value})}
+                        className="bg-transparent text-xs font-bold text-neutral-700 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 bg-neutral-50 px-4 py-2.5 rounded-2xl border border-neutral-100">
+                    <span className={`text-xs font-bold ${uiSettings.evidenceEnabled ? 'text-emerald-600' : 'text-neutral-500'}`}>
+                      {uiSettings.evidenceEnabled ? 'Activo' : 'Inactivo'}
+                    </span>
+                    <button 
+                      onClick={() => setUiSettings({...uiSettings, evidenceEnabled: !uiSettings.evidenceEnabled})}
+                      className={`relative w-12 h-7 rounded-full transition-all duration-300 ${uiSettings.evidenceEnabled ? 'bg-emerald-500' : 'bg-neutral-300'}`}
+                    >
+                      <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all shadow-sm ${uiSettings.evidenceEnabled ? 'left-6' : 'left-1'}`} />
+                    </button>
+                  </div>
+
+                  <button 
+                    onClick={saveSettings}
+                    className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-sm flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+              <div>
+                <h3 className="text-xl font-black text-neutral-900 tracking-tight">Capturas de Evidencia</h3>
+                <p className="text-sm text-neutral-500 font-medium italic">Programas Sociales Compartidos por el equipo territorial.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                 <div className="flex items-center gap-2 px-4 py-2 bg-neutral-100 rounded-xl border border-neutral-200">
+                  <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">Total Evidencia</span>
+                  <div className="h-4 w-[1px] bg-neutral-300" />
+                  <span className="text-xs font-bold text-neutral-600">
+                    {evidence.length} Registros
+                  </span>
+                </div>
+                <button 
+                  onClick={async () => {
+                    const XLSX = await import('xlsx');
+                    const data = evidence.map(e => ({
+                      'Fecha': e.timestamp?.toDate ? format(e.timestamp.toDate(), 'dd/MM/yyyy HH:mm:ss') : 'N/A',
+                      'Usuario': e.userName,
+                      'Email': e.userEmail,
+                      'Estado': e.status === 'pending' ? 'Pendiente' : 'Aprobado',
+                      'URL Imagen': e.imageUrl.length > 32000 ? 'Base64 Largo' : e.imageUrl
+                    }));
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Evidencia');
+                    XLSX.writeFile(wb, `Reporte_Evidencia_${format(new Date(), 'dd-MM-yyyy')}.xlsx`);
+                  }}
+                  className="flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 text-sm"
+                >
+                  <Download className="w-4 h-4" />
+                  Exportar CSV/Excel
+                </button>
+                <button 
+                  onClick={async () => {
+                    const zip = new JSZip();
+                    const folder = zip.folder("evidencias");
+                    evidence.forEach((e, idx) => {
+                      if (e.imageUrl.startsWith('data:image')) {
+                        const base64 = e.imageUrl.split(',')[1];
+                        const dateStr = e.timestamp?.toDate ? format(e.timestamp.toDate(), 'yyyyMMdd_HHmmss') : `file_${idx}`;
+                        folder?.file(`evidencia_${e.userName.replace(/\s+/g, '_')}_${dateStr}.jpg`, base64, {base64: true});
+                      }
+                    });
+                    const content = await zip.generateAsync({type: "blob"});
+                    saveAs(content, `Imagenes_Evidencia_${format(new Date(), 'dd-MM-yyyy')}.zip`);
+                  }}
+                  className="flex items-center justify-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 text-sm"
+                >
+                  <ImageIcon className="w-4 h-4" />
+                  Descargar Imágenes (ZIP)
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {evidence.map((item) => (
+                <div key={item.id} className="bg-white border border-neutral-100 rounded-[2rem] overflow-hidden group hover:shadow-xl hover:shadow-neutral-100 transition-all">
+                  <div className="aspect-[4/3] relative bg-neutral-100 overflow-hidden">
+                    <img 
+                      src={item.imageUrl} 
+                      alt="Evidencia" 
+                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-4 right-4 group-hover:opacity-100 transition-opacity z-10">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEvidenceToDelete(item.id);
+                        }}
+                        className="p-2 bg-red-500 text-white rounded-xl shadow-lg hover:bg-red-600 active:scale-95 transition-all"
+                        title="Eliminar registro"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                        {item.userName?.[0].toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-neutral-900 truncate tracking-tight">{item.userName}</p>
+                        <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">Registrador</p>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center bg-neutral-50 p-3 rounded-xl">
+                      <div className="flex items-center gap-2 text-neutral-500">
+                        <Clock className="w-3 h-3" />
+                        <span className="text-[10px] font-bold">
+                          {item.timestamp?.toDate ? format(item.timestamp.toDate(), 'dd/MM/yy HH:mm') : '...'}
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          const link = document.createElement('a');
+                          link.href = item.imageUrl;
+                          link.download = `evidencia_${item.userName}_${item.timestamp?.toDate ? format(item.timestamp.toDate(), 'yyyyMMdd') : 'doc'}.jpg`;
+                          link.click();
+                        }}
+                        className="p-1.5 text-indigo-600 hover:bg-indigo-100 rounded-lg"
+                        title="Descargar Foto"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEvidenceToDelete(item.id);
+                        }}
+                        className="p-1.5 text-red-500 hover:bg-red-100 rounded-lg"
+                        title="Eliminar de forma permanente"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Evaluation Controls */}
+                    <div className="mt-4 pt-4 border-t border-neutral-100 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => updateEvidenceStatus(item.id, 'approved')}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border transition-all ${item.status === 'approved' ? 'bg-emerald-500 border-emerald-500 text-white shadow-lg shadow-emerald-100' : 'bg-transparent border-neutral-200 text-neutral-400 hover:border-emerald-500 hover:text-emerald-500'}`}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span className="text-[10px] font-black uppercase tracking-wider">Aprobar</span>
+                        </button>
+                        <button 
+                          onClick={() => updateEvidenceStatus(item.id, 'rejected')}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border transition-all ${item.status === 'rejected' ? 'bg-red-500 border-red-500 text-white shadow-lg shadow-red-100' : 'bg-transparent border-neutral-200 text-neutral-400 hover:border-red-500 hover:text-red-500'}`}
+                        >
+                          <X className="w-4 h-4" />
+                          <span className="text-[10px] font-black uppercase tracking-wider">Rechazar</span>
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <textarea 
+                          placeholder="Escribe retroalimentación..."
+                          defaultValue={item.feedback || ''}
+                          onBlur={(e) => {
+                            if (e.target.value !== (item.feedback || '')) {
+                              updateEvidenceFeedback(item.id, e.target.value);
+                            }
+                          }}
+                          className="w-full text-[10px] p-3 rounded-xl bg-neutral-50 border border-neutral-100 focus:outline-none focus:border-indigo-500 min-h-[60px] resize-none font-medium text-neutral-600 placeholder:text-neutral-300"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {evidence.length === 0 && (
+                <div className="col-span-full py-20 text-center space-y-4">
+                  <ImageIcon className="w-16 h-16 text-neutral-100 mx-auto" />
+                  <p className="text-neutral-400 font-bold">Aún no hay evidencias subidas.</p>
+                </div>
+              )}
+            </div>
+
+            <ConfirmModal 
+              isOpen={!!evidenceToDelete}
+              onClose={() => setEvidenceToDelete(null)}
+              onConfirm={() => evidenceToDelete && handleDeleteEvidence(evidenceToDelete)}
+              title="¿Eliminar evidencia?"
+              message="¿Estás seguro de que deseas eliminar este registro de evidencia de forma permanente? Esta acción no se puede deshacer."
+            />
           </div>
         )}
 
