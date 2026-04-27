@@ -13,38 +13,42 @@ export default function Evidence() {
   const [image, setImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [lastEvidence, setLastEvidence] = useState<any>(null);
+  const [history, setHistory] = useState<any[]>([]);
   const [checkingStatus, setCheckingStatus] = useState(true);
 
-  // Check if user has uploaded for the current period
+  // Fetch all evidence history
   React.useEffect(() => {
-    if (!userProfile?.id || !settings?.evidenceStartDate || !settings?.evidenceEndDate) {
-      setCheckingStatus(false);
-      return;
-    }
+    if (!userProfile?.id) return;
 
-    const checkPeriodUpload = async () => {
+    const fetchHistory = async () => {
       try {
         const q = query(
           collection(db, 'evidence'),
           where('userId', '==', userProfile.id),
-          where('periodStart', '==', settings.evidenceStartDate),
-          where('periodEnd', '==', settings.evidenceEndDate),
-          limit(1)
+          orderBy('timestamp', 'desc')
         );
         const snapshot = await getDocs(q);
-        if (!snapshot.empty) {
-          setLastEvidence({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setHistory(docs);
+
+        // Also identify if there's one for the current period
+        if (settings?.evidenceStartDate && settings?.evidenceEndDate) {
+          const current = docs.find(e => 
+            e.periodStart === settings.evidenceStartDate && 
+            e.periodEnd === settings.evidenceEndDate
+          );
+          setLastEvidence(current || null);
         } else {
-          setLastEvidence(null);
+          setLastEvidence(docs[0] || null);
         }
       } catch (error) {
-        console.error("Error checking period upload:", error);
+        console.error("Error fetching history:", error);
       } finally {
         setCheckingStatus(false);
       }
     };
 
-    checkPeriodUpload();
+    fetchHistory();
   }, [userProfile?.id, settings?.evidenceStartDate, settings?.evidenceEndDate]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -123,7 +127,7 @@ export default function Evidence() {
       setImage(null);
       
       // Update local state to show the new submission
-      setLastEvidence({
+      const newEvidence = {
         id: docRef.id,
         userId: userProfile.id,
         userEmail: userProfile.email,
@@ -132,8 +136,11 @@ export default function Evidence() {
         status: 'pending',
         periodStart,
         periodEnd,
-        feedback: ''
-      });
+        feedback: '',
+        timestamp: new Date()
+      };
+      setLastEvidence(newEvidence);
+      setHistory(prev => [newEvidence, ...prev]);
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'evidence');
       toast.error('Error al subir la evidencia');
@@ -350,6 +357,68 @@ export default function Evidence() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Historial Section */}
+      <div className="bg-white p-8 rounded-3xl border border-neutral-200 shadow-sm space-y-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="bg-indigo-50 p-2 rounded-lg">
+              <Clock className="text-indigo-600 w-5 h-5" />
+            </div>
+            <h3 className="text-xl font-bold text-neutral-900">Historial de Evidencias</h3>
+          </div>
+          <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{history.length} Entregas totales</p>
+        </div>
+
+        {history.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {history.map((item) => (
+              <div key={item.id} className="group relative bg-neutral-50 rounded-2xl overflow-hidden border border-neutral-100 hover:shadow-xl transition-all duration-300">
+                <div className="aspect-[4/3] relative overflow-hidden">
+                  <img 
+                    src={item.imageUrl} 
+                    alt="Evidencia histórica" 
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                  />
+                  <div className={`absolute top-3 left-3 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border backdrop-blur-md shadow-sm z-10 ${
+                    item.status === 'approved' ? 'bg-emerald-500/80 border-emerald-400 text-white' :
+                    item.status === 'rejected' ? 'bg-red-500/80 border-red-400 text-white' :
+                    'bg-amber-500/80 border-amber-400 text-white'
+                  }`}>
+                    {item.status === 'approved' ? 'Aprobada' : 
+                     item.status === 'rejected' ? 'Rechazada' : 'Pendiente'}
+                  </div>
+                </div>
+                <div className="p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">
+                      {item.timestamp?.toDate ? format(item.timestamp.toDate(), 'dd MMM yyyy', { locale: es }) : 'Reciente'}
+                    </p>
+                    {item.feedback && (
+                      <div title="Tiene comentarios" className="p-1 bg-indigo-100 rounded-md">
+                        <FileText className="w-3 h-3 text-indigo-600" />
+                      </div>
+                    )}
+                  </div>
+                  {item.periodStart && item.periodEnd && (
+                    <p className="text-[9px] text-neutral-500 font-medium italic">
+                      Periodo: {format(new Date(item.periodStart + 'T12:00:00'), 'dd/MM')} - {format(new Date(item.periodEnd + 'T12:00:00'), 'dd/MM')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="py-12 flex flex-col items-center justify-center text-center space-y-4 border-2 border-dashed border-neutral-100 rounded-2xl">
+            <Clock className="w-12 h-12 text-neutral-100" />
+            <div>
+              <p className="text-neutral-400 font-bold">No hay entregas registradas anteriormente</p>
+              <p className="text-neutral-300 text-xs mt-1">Tus evidencias aparecerán aquí conforme las vayas subiendo.</p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -136,6 +136,11 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       return;
     }
 
+    if (phoneNumber.length < 10) {
+      toast.error('El número de teléfono debe tener 10 dígitos exactos');
+      return;
+    }
+
     setLoading(true);
     const section = sections.find(s => s.id === sectionId);
     const trimmedPersonName = personName.trim();
