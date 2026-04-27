@@ -35,7 +35,7 @@ export default function Sections() {
       });
       
       userTotalProgress = userTotalCasillas > 0 
-        ? Math.round((userRegisteredCasillas / userTotalCasillas) * 100) 
+        ? parseFloat(((userRegisteredCasillas / userTotalCasillas) * 100).toFixed(2))
         : 0;
     }
   } else {
@@ -164,7 +164,7 @@ export default function Sections() {
               <div className="flex justify-between items-end">
                 <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest italic">Porcentaje de cumplimiento</span>
                 <span className={`text-4xl font-black ${getProgressColor(userTotalProgress).split(' ')[0]}`}>
-                  {userTotalProgress}%
+                  {userTotalProgress.toFixed(2)}%
                 </span>
               </div>
               <div className="relative w-full h-4 bg-neutral-100 rounded-full overflow-hidden p-1 border border-neutral-50 shadow-inner">
@@ -190,7 +190,10 @@ export default function Sections() {
             
             // Use unique casilla logic for accurate percentages
             const uniqueRegistered = new Set(sectionRegs.map(r => r.casilla)).size;
-            const progressPercent = Math.min(Math.round((uniqueRegistered / totalCasillas) * 100), 100);
+            const progressPercent = Math.min(
+              parseFloat(((uniqueRegistered / totalCasillas) * 100).toFixed(2)), 
+              100
+            );
             
             const colorClasses = getProgressColor(progressPercent);
             const bgClass = getProgressBg(progressPercent);
@@ -236,7 +239,7 @@ export default function Sections() {
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400 mb-1">Avance</span>
-                      <span className={`text-2xl font-black ${colorClasses.split(' ')[0]}`}>{progressPercent}%</span>
+                      <span className={`text-2xl font-black ${colorClasses.split(' ')[0]}`}>{progressPercent.toFixed(2)}%</span>
                     </div>
                   </div>
 
