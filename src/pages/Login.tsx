@@ -187,7 +187,7 @@ export default function Login() {
 
             {item === 'description' && (
               <p className="text-neutral-500 text-center mb-8 text-sm leading-relaxed">
-                Ingresa tus credenciales autorizadas para acceder a la <span className="font-semibold text-neutral-800 uppercase tracking-tighter">APP ELECCIONES 2027 HERV</span>.
+                Ingresa tus credenciales autorizadas para acceder.
               </p>
             )}
 
@@ -269,15 +269,14 @@ export default function Login() {
             
             {item === 'footer' && (
               <div className="mt-8 pt-8 border-t border-neutral-100 w-full text-center">
-                <p className="text-xs text-neutral-400 mb-3 font-medium">¿Problemas para acceder? Contacta a soporte</p>
                 <a 
-                  href="https://wa.me/524434008893?text=Hola,%20tengo%20problemas%20con%20mi%20acceso..." 
+                  href="https://wa.me/524434008893?text=HOLA%20CESAR%2C%20NECESITO%20INFORMACION..." 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-[10px] text-neutral-500 uppercase tracking-[0.2em] font-black hover:text-indigo-600 transition-colors group"
                 >
                   <span className="w-6 h-[1px] bg-neutral-200 group-hover:bg-indigo-200 transition-colors" />
-                  BY HERV
+                  BY HC
                   <span className="w-6 h-[1px] bg-neutral-200 group-hover:bg-indigo-200 transition-colors" />
                 </a>
               </div>
