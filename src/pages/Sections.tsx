@@ -12,13 +12,31 @@ export default function Sections() {
 
   // Determine which sections to show
   let displaySections = [];
+  let userTotalProgress = 0;
+  let userTotalCasillas = 0;
+  let userRegisteredCasillas = 0;
+  let selectedUserData = null;
+
   if (isAdmin) {
     if (userFilter === 'all') {
       displaySections = sections;
     } else {
-      const selectedUser = users.find(u => u.id === userFilter);
-      const assignedIds = selectedUser?.assignedSections || [];
+      selectedUserData = users.find(u => u.id === userFilter);
+      const assignedIds = selectedUserData?.assignedSections || [];
       displaySections = sections.filter(s => assignedIds.includes(s.id));
+
+      displaySections.forEach(section => {
+        const sectionRegs = registrations.filter(r => r.sectionId === section.id);
+        const totalCasillas = section.casillas?.length || 1;
+        const uniqueRegistered = new Set(sectionRegs.map(r => r.casilla)).size;
+        
+        userTotalCasillas += totalCasillas;
+        userRegisteredCasillas += uniqueRegistered;
+      });
+      
+      userTotalProgress = userTotalCasillas > 0 
+        ? Math.round((userRegisteredCasillas / userTotalCasillas) * 100) 
+        : 0;
     }
   } else {
     displaySections = sections.filter(s => 
@@ -112,6 +130,56 @@ export default function Sections() {
             </span>
           </div>
         </div>
+      )}
+
+      {isAdmin && userFilter !== 'all' && selectedUserData && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white border border-neutral-100 rounded-[2.5rem] p-8 shadow-sm overflow-hidden relative"
+        >
+          <div className="absolute top-0 right-0 p-8 opacity-10">
+            <UserIcon className="w-32 h-32 text-indigo-600" />
+          </div>
+          
+          <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
+            <div className="space-y-2">
+              <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Resumen de Avance General</p>
+              <h3 className="text-3xl font-black text-neutral-900 leading-tight">
+                {selectedUserData.displayName || selectedUserData.email}
+              </h3>
+              <div className="flex items-center gap-4 text-neutral-500 font-bold text-xs uppercase tracking-widest">
+                <span className="flex items-center gap-1">
+                   <LayoutGrid className="w-4 h-4" />
+                   {selectedUserData.assignedSections?.length || 0} Secciones Asignadas
+                </span>
+                <span className="flex items-center gap-1">
+                   <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                   {userRegisteredCasillas} / {userTotalCasillas} Casillas Cubiertas
+                </span>
+              </div>
+            </div>
+
+            <div className="flex-1 max-w-md w-full space-y-4">
+              <div className="flex justify-between items-end">
+                <span className="text-[10px] font-black text-neutral-400 uppercase tracking-widest italic">Porcentaje de cumplimiento</span>
+                <span className={`text-4xl font-black ${getProgressColor(userTotalProgress).split(' ')[0]}`}>
+                  {userTotalProgress}%
+                </span>
+              </div>
+              <div className="relative w-full h-4 bg-neutral-100 rounded-full overflow-hidden p-1 border border-neutral-50 shadow-inner">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${userTotalProgress}%` }}
+                  transition={{ duration: 1.5, ease: "circOut" }}
+                  className={`h-full rounded-full ${getProgressBg(userTotalProgress)} shadow-[0_0_15px_rgba(79,70,229,0.4)] relative`}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                </motion.div>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

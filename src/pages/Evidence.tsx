@@ -28,7 +28,7 @@ export default function Evidence() {
           orderBy('timestamp', 'desc')
         );
         const snapshot = await getDocs(q);
-        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as any[];
         setHistory(docs);
 
         // Also identify if there's one for the current period
