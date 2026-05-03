@@ -11,6 +11,9 @@ import { motion } from 'framer-motion';
 export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boolean }) {
   const { settings, sections, registrations, userProfile, refreshCount } = useGlobalState();
   const [personName, setPersonName] = useState('');
+  const [personLastNameP, setPersonLastNameP] = useState('');
+  const [personLastNameM, setPersonLastNameM] = useState('');
+  const [electorKey, setElectorKey] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [ineFront, setIneFront] = useState<string | null>(null);
   const [ineBack, setIneBack] = useState<string | null>(null);
@@ -74,6 +77,10 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
     }
   }, [settings]);
 
+  const removeAccents = (str: string) => {
+    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  };
+
   const recentRegistrations = registrations.slice(0, 5);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') => {
@@ -121,8 +128,13 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       return;
     }
 
-    if (!personName || !sectionId || !phoneNumber || !casilla) {
-      toast.error('Por favor completa los campos obligatorios');
+    if (!personName || !personLastNameP || !personLastNameM || !electorKey || !sectionId || !phoneNumber || !casilla) {
+      toast.error('Por favor completa todos los campos obligatorios');
+      return;
+    }
+
+    if (electorKey.length !== 18) {
+      toast.error('La Clave de Elector debe tener exactamente 18 caracteres');
       return;
     }
 
@@ -143,7 +155,14 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
     setLoading(true);
     const section = sections.find(s => s.id === sectionId);
-    const trimmedPersonName = personName.trim();
+    
+    // Format data strictly
+    const finalFirstName = removeAccents(personName.trim());
+    const finalLastNameP = removeAccents(personLastNameP.trim());
+    const finalLastNameM = removeAccents(personLastNameM.trim());
+    const finalFullName = `${finalLastNameP} ${finalLastNameM} ${finalFirstName}`.trim();
+    const finalElectorKey = removeAccents(electorKey.trim());
+
     let toastId: string | number | undefined;
 
     try {
@@ -171,7 +190,11 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       console.log("Guardando registro en Firestore...");
       
       await addDoc(collection(db, 'registrations'), {
-        personName: trimmedPersonName,
+        personName: finalFullName,
+        firstName: finalFirstName,
+        lastNameP: finalLastNameP,
+        lastNameM: finalLastNameM,
+        electorKey: finalElectorKey,
         phoneNumber,
         ineFrontUrl: ineFront,
         ineBackUrl: ineBack,
@@ -186,6 +209,9 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
       console.log("Registro exitoso");
       toast.success('Registro completado con éxito', { id: toastId });
       setPersonName('');
+      setPersonLastNameP('');
+      setPersonLastNameM('');
+      setElectorKey('');
       setPhoneNumber('');
       setIneFront(null);
       setIneBack(null);
@@ -296,19 +322,70 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                   <div>
                     <label className="block text-sm font-semibold text-neutral-700 mb-2">
-                      Nombre de la Persona <span className="text-red-500">*</span>
+                      Apellido Paterno <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={personLastNameP}
+                      onChange={(e) => setPersonLastNameP(removeAccents(e.target.value))}
+                      placeholder="APELLIDO PATERNO"
+                      required
+                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none font-medium uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-2">
+                      Apellido Materno <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={personLastNameM}
+                      onChange={(e) => setPersonLastNameM(removeAccents(e.target.value))}
+                      placeholder="APELLIDO MATERNO"
+                      required
+                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none font-medium uppercase"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-neutral-700 mb-2">
+                      Nombre(s) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
                       value={personName}
-                      onChange={(e) => setPersonName(e.target.value)}
-                      placeholder="Ej. Juan Pérez"
+                      onChange={(e) => setPersonName(removeAccents(e.target.value))}
+                      placeholder="NOMBRE(S)"
                       required
-                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none"
+                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none font-medium uppercase"
                     />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+                  <div className="lg:col-span-2">
+                    <label className="block text-sm font-semibold text-neutral-700 mb-2">
+                      Clave de Elector (18 caracteres) <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={18}
+                      minLength={18}
+                      value={electorKey}
+                      onChange={(e) => setElectorKey(removeAccents(e.target.value))}
+                      placeholder="ABCDEF123456789012"
+                      required
+                      className="w-full px-4 py-3 rounded-xl border border-neutral-200 focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all outline-none font-mono font-bold tracking-widest uppercase"
+                    />
+                    <div className="flex justify-between items-center text-[10px] font-bold mt-1">
+                      <span className={electorKey.length === 18 ? 'text-emerald-500' : 'text-neutral-400'}>
+                        {electorKey.length} / 18 caracteres
+                      </span>
+                    </div>
                   </div>
 
                   <div>

@@ -757,6 +757,10 @@ export default function Admin() {
 
   const [setupError, setSetupError] = useState<string | null>(null);
 
+  const removeAccents = (str: string) => {
+    return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserEmail || !newUserPassword || !newUserName) {
@@ -807,7 +811,7 @@ export default function Admin() {
         email: identifier,
         role: newUserRole,
         createdAt: new Date(),
-        createdBy: settings.adminEmail || 'admin'
+        createdBy: settings?.adminEmail || 'admin'
       }, { merge: true });
 
       // 5. Clean up secondary app
@@ -2178,7 +2182,15 @@ export default function Admin() {
                       <td className="px-6 py-4">
                         <div className="flex flex-col">
                           <span className="text-sm font-bold text-neutral-900">{reg.personName}</span>
-                          <span className="text-xs text-neutral-500">{reg.phoneNumber || 'Sin teléfono'}</span>
+                          <div className="flex items-center gap-2">
+                             <span className="text-xs text-neutral-500">{reg.phoneNumber || 'Sin teléfono'}</span>
+                             {reg.electorKey && (
+                               <>
+                                 <span className="text-neutral-200">|</span>
+                                 <span className="text-[10px] text-indigo-500 font-mono font-bold tracking-widest">{reg.electorKey}</span>
+                               </>
+                             )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
@@ -2780,6 +2792,18 @@ function EditRegistrationModal({ registration, onClose }: any) {
                 className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all font-medium"
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Clave de Elector</label>
+              <input 
+                value={data.electorKey || ''}
+                maxLength={18}
+                onChange={e => setData({...data, electorKey: e.target.value.toUpperCase()})}
+                className="w-full px-5 py-3 rounded-xl border border-neutral-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-50 transition-all font-mono font-bold tracking-widest"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="text-xs font-bold text-neutral-500 uppercase tracking-widest">Teléfono</label>
               <input 
