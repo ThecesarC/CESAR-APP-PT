@@ -318,7 +318,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
                 <div className="bg-indigo-100 p-2 rounded-lg">
                   <UserPlus className="text-indigo-600 w-5 h-5" />
                 </div>
-                <h2 className="text-xl font-bold text-neutral-900">Registrar responsable de sección</h2>
+                <h2 className="text-xl font-bold text-neutral-900">Registrar responsable</h2>
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6">
