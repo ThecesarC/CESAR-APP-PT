@@ -41,7 +41,7 @@ service cloud.firestore {
     }
 
     function isValidRegistration(data, isUpdate) {
-      let requiredKeys = ['personName', 'phoneNumber', 'sectionId', 'casilla', 'createdAt'];
+      let requiredKeys = ['personName', 'phoneNumber', 'sectionId', 'casilla', 'createdAt', 'responsibleId'];
       return data.keys().hasAll(requiredKeys) &&
              data.personName is string && data.personName.size() > 0 &&
              data.phoneNumber is string && data.phoneNumber.size() >= 10 &&
