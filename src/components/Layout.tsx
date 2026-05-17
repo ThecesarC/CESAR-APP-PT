@@ -20,7 +20,7 @@ const ICON_MAP: Record<string, any> = {
 export default function Layout({ children, user, isAdmin }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
-  const { settings, registrations, sections, userProfile, refreshCount, users } = useGlobalState();
+  const { settings, registrations, sections, userProfile, refreshCount, users, evidence } = useGlobalState();
   
   const [appIcon, setAppIcon] = React.useState('Shield');
   const [logoUrl, setLogoUrl] = React.useState('https://i.postimg.cc/wB2pwRgz/LOGO-ACTUAL-HUGO.jpg');
@@ -126,6 +126,10 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
       setIsLoggingOut(false);
     }
   };
+
+  const displayEvidenceCount = isAdmin 
+    ? evidence.length 
+    : evidence.filter(e => e.userId === (userProfile?.id || user?.uid)).length;
 
   const navItems = [
     { name: 'Panel de Registro', path: '/', icon: LayoutDashboard },
@@ -333,14 +337,23 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                     <Link
                       key={item.path}
                       to={item.path}
-                      className={`flex items-center gap-3 px-4 py-4 rounded-2xl transition-all ${
+                      className={`flex items-center gap-3 px-4 py-4 rounded-2xl transition-all relative ${
                         location.pathname === item.path
                           ? 'bg-indigo-50 text-indigo-700 font-bold'
                           : 'text-neutral-600 hover:bg-neutral-50'
                       }`}
                     >
                       <item.icon className="w-5 h-5" />
-                      {item.name}
+                      <span className="flex-1">{item.name}</span>
+                      {item.path === '/evidence' && displayEvidenceCount > 0 && (
+                        <motion.div 
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shadow-sm shadow-red-200 flex items-center justify-center min-w-[20px] h-5"
+                        >
+                          {displayEvidenceCount}
+                        </motion.div>
+                      )}
                     </Link>
                   );
                 })}
@@ -444,14 +457,24 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all relative ${
                   location.pathname === item.path
                     ? 'bg-indigo-50 text-indigo-700 font-medium'
                     : 'text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900'
                 }`}
               >
                 <item.icon className="w-5 h-5" />
-                {item.name}
+                <span className="flex-1">{item.name}</span>
+                {item.path === '/evidence' && displayEvidenceCount > 0 && (
+                  <motion.div 
+                    key={displayEvidenceCount}
+                    initial={{ scale: 0.5, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-lg shadow-red-100 flex items-center justify-center min-w-[18px] h-4.5"
+                  >
+                    {displayEvidenceCount}
+                  </motion.div>
+                )}
               </Link>
             );
           })}

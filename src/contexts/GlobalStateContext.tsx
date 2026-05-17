@@ -15,6 +15,7 @@ interface GlobalState {
   settings: any;
   sections: any[];
   registrations: any[];
+  evidence: any[];
   users: any[];
   userProfile: any;
   registrationCount: number;
@@ -29,6 +30,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
   const [settings, setSettings] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
   const [registrations, setRegistrations] = useState<any[]>([]);
+  const [evidence, setEvidence] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [registrationCount, setRegistrationCount] = useState(0);
@@ -77,6 +79,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
     if (!isAuthenticated || !currentUid) {
       setSections([]);
       setRegistrations([]);
+      setEvidence([]);
       setUsers([]);
       setUserProfile(null);
       setLoading(false);
@@ -110,6 +113,14 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       console.error("Registrations listener error:", error);
       setLoading(false);
     });
+    
+    // 3.5 Evidence Listener
+    const qEvidence = query(collection(db, 'evidence'), orderBy('timestamp', 'desc'));
+    const unsubEvidence = onSnapshot(qEvidence, (snap) => {
+      setEvidence(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Evidence listener error:", error);
+    });
 
     // 4. Users Listener (for global stats)
     let unsubUsers = () => {};
@@ -127,6 +138,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       unsubProfile();
       unsubUsers();
       unsubSections();
+      unsubEvidence();
       unsubRegs();
     };
   }, [isAuthenticated, currentUid]);
@@ -136,6 +148,7 @@ export function GlobalStateProvider({ children }: { children: React.ReactNode })
       settings, 
       sections, 
       registrations, 
+      evidence,
       users,
       userProfile,
       registrationCount, 
