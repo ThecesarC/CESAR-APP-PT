@@ -26,8 +26,9 @@ export default function Sections() {
       displaySections = sections.filter(s => assignedIds.includes(s.id));
 
       displaySections.forEach(section => {
-        const sectionRegs = registrations.filter(r => r.sectionId === section.id);
-        const totalCasillas = section.casillas?.length || 1;
+        const sectionRegs = registrations.filter(r => r.sectionId === section.id && r.casilla.toUpperCase() !== 'SIN CASILLAS');
+        const validCasillas = (section.casillas || ['Única']).filter((c: string) => c.toUpperCase() !== 'SIN CASILLAS');
+        const totalCasillas = validCasillas.length;
         const uniqueRegistered = new Set(sectionRegs.map(r => r.casilla)).size;
         
         userTotalCasillas += totalCasillas;
@@ -124,8 +125,10 @@ export default function Sections() {
             <CheckCircle2 className="w-4 h-4 text-emerald-600" />
             <span className="text-xs font-bold text-emerald-700">
               {sections.filter(s => {
-                const sRegs = registrations.filter(r => r.sectionId === s.id);
-                return sRegs.length >= (s.casillas?.length || 1);
+                const sRegs = registrations.filter(r => r.sectionId === s.id && r.casilla.toUpperCase() !== 'SIN CASILLAS');
+                const validCasillas = (s.casillas || ['Única']).filter((c: string) => c.toUpperCase() !== 'SIN CASILLAS');
+                if (validCasillas.length === 0) return false;
+                return sRegs.length >= validCasillas.length;
               }).length} Completas
             </span>
           </div>
@@ -185,15 +188,15 @@ export default function Sections() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         <AnimatePresence mode="popLayout">
           {filteredSections.map((section) => {
-            const sectionRegs = registrations.filter(r => r.sectionId === section.id);
-            const totalCasillas = section.casillas?.length || 1;
+            const sectionRegs = registrations.filter(r => r.sectionId === section.id && r.casilla.toUpperCase() !== 'SIN CASILLAS');
+            const validCasillas = (section.casillas || ['Única']).filter((c: string) => c.toUpperCase() !== 'SIN CASILLAS');
+            const totalCasillas = validCasillas.length;
             
             // Use unique casilla logic for accurate percentages
             const uniqueRegistered = new Set(sectionRegs.map(r => r.casilla)).size;
-            const progressPercent = Math.min(
-              parseFloat(((uniqueRegistered / totalCasillas) * 100).toFixed(2)), 
-              100
-            );
+            const progressPercent = totalCasillas > 0 
+              ? Math.min(parseFloat(((uniqueRegistered / totalCasillas) * 100).toFixed(2)), 100)
+              : 0;
             
             const colorClasses = getProgressColor(progressPercent);
             const bgClass = getProgressBg(progressPercent);

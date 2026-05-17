@@ -2099,7 +2099,7 @@ export default function Admin() {
                     {registrations.length} Registros Totales
                   </span>
                   <span className="text-xs font-bold text-indigo-600">
-                    ({new Set(registrations.map(r => `${r.sectionId}-${r.casilla}`)).size} Casillas Únicas)
+                    ({new Set(registrations.filter(r => r.casilla.toUpperCase() !== 'SIN CASILLAS').map(r => `${r.sectionId}-${r.casilla}`)).size} Casillas Únicas)
                   </span>
                 </div>
                 {selectedRegistrations.length > 0 && (

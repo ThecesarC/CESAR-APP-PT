@@ -33,12 +33,18 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
   if (isAdmin) {
     // Global progress calculation: Any unique casilla covered in the entire catalogue
-    myTotalCasillasCount = sections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+    myTotalCasillasCount = sections.reduce((acc, s) => {
+      const validCasillas = (s.casillas || ['Única']).filter((c: string) => c.toUpperCase() !== 'SIN CASILLAS');
+      return acc + validCasillas.length;
+    }, 0);
     
     // Count UNIQUE casillas covered across all registrations in known sections
     const uniqueCovered = new Set(
       registrations
-        .filter(r => r.sectionId && sections.some(s => s.id === r.sectionId))
+        .filter(r => {
+          const section = sections.find(s => s.id === r.sectionId);
+          return section && r.casilla.toUpperCase() !== 'SIN CASILLAS';
+        })
         .map(r => `${r.sectionId}-${r.casilla}`)
     );
     myRegistrationCount = uniqueCovered.size;
@@ -48,7 +54,10 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
     const actualAssignedIds = assignedSectionIds.filter(id => sections.some(s => s.id === id));
     const mySections = sections.filter(s => actualAssignedIds.includes(s.id));
     
-    myTotalCasillasCount = mySections.reduce((acc, s) => acc + (s.casillas?.length || 1), 0);
+    myTotalCasillasCount = mySections.reduce((acc, s) => {
+      const validCasillas = (s.casillas || ['Única']).filter((c: string) => c.toUpperCase() !== 'SIN CASILLAS');
+      return acc + validCasillas.length;
+    }, 0);
     
     // Count UNIQUE casillas covered for this user
     const myUniqueCovered = new Set(
@@ -56,7 +65,8 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
         .filter(r => 
           r.sectionId &&
           actualAssignedIds.includes(r.sectionId) && 
-          r.responsibleId === (userProfile?.id || user?.uid)
+          r.responsibleId === (userProfile?.id || user?.uid) &&
+          r.casilla.toUpperCase() !== 'SIN CASILLAS'
         )
         .map(r => `${r.sectionId}-${r.casilla}`)
     );
@@ -69,7 +79,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
 
   // Get casillas for selected section
   const selectedSection = sections.find(s => s.id === sectionId);
-  const availableCasillas = selectedSection?.casillas || [];
+  const availableCasillas = (selectedSection?.casillas || []).filter((c: string) => c.toUpperCase() !== 'SIN CASILLAS');
 
   useEffect(() => {
     if (settings?.dashboardOrder) {
