@@ -168,7 +168,7 @@ export default function Evidence() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8">
+    <div className="max-w-4xl mx-auto space-y-8 pb-32 md:pb-8">
       <div className="bg-indigo-600 rounded-[2.5rem] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl shadow-indigo-100">
         <div className="relative z-10">
           <div className="flex items-center gap-4 mb-6">

@@ -68,7 +68,7 @@ export default function Sections() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-32 md:pb-8">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <div className="bg-indigo-600 p-3 rounded-2xl shadow-lg shadow-indigo-100">

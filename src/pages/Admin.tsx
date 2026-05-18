@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { useGlobalState } from '../contexts/GlobalStateContext';
@@ -12,12 +12,14 @@ import {
 } from 'firebase/firestore';
 import { AnimatePresence, motion, Reorder } from 'framer-motion';
 import { 
-  Settings, Users, LayoutGrid, FileUp, Palette, 
+  Settings, Users, LayoutGrid, FileUp, Palette, Search, Filter,
   Plus, Trash2, Save, ChevronRight, X, GripVertical,
   FileText, FileSpreadsheet, Image as ImageIcon, Video, Link as LinkIcon,
   Upload, Check, Heart, Star, Zap, Shield, Target, Rocket, Box, Activity,
   Move, ArrowLeft, LayoutDashboard, List, Download, AlertTriangle, ShieldCheck,
-  Eye, Edit, Camera, Clock, CheckCircle2
+  Eye, Edit, Camera, Clock, CheckCircle2, Map as MapIcon,
+  Scissors, MapPin, MousePointer2, Layers, Sliders, Type,
+  ExternalLink
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -26,7 +28,8 @@ import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import Cropper from 'react-easy-crop';
-import { Scissors } from 'lucide-react';
+import { TerritorialMap } from '../components/TerritorialMap';
+
 
 function ConfirmModal({ isOpen, onClose, onConfirm, title, message, confirmText = "Eliminar", type = "danger" }: any) {
   if (!isOpen) return null;
@@ -1321,7 +1324,7 @@ export default function Admin() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-32 md:pb-8">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button 
@@ -1342,7 +1345,8 @@ export default function Admin() {
             { id: 'layout', icon: Move, label: 'Vista Previa' },
             { id: 'users', icon: Users, label: 'Usuarios' },
             { id: 'history', icon: FileSpreadsheet, label: 'Registros' },
-            { id: 'evidence', icon: Camera, label: 'Evidencia' }
+            { id: 'evidence', icon: Camera, label: 'Evidencia' },
+            { id: 'map_consult', icon: MapIcon, label: 'Mapa de Consulta' }
           ].map(tab => (
             <button
               key={tab.id}
@@ -2505,6 +2509,12 @@ export default function Admin() {
               title="¿Eliminar evidencia?"
               message="¿Estás seguro de que deseas eliminar este registro de evidencia de forma permanente? Esta acción no se puede deshacer."
             />
+          </div>
+        )}
+
+        {activeTab === 'map_consult' && (
+          <div className="h-[700px] flex flex-col bg-white rounded-3xl overflow-hidden shadow-sm border border-neutral-100">
+            <TerritorialMap registrations={registrations} isAdminView={true} />
           </div>
         )}
 

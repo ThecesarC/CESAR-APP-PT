@@ -18,6 +18,7 @@ import Sections from './pages/Sections';
 import SectionDetail from './pages/SectionDetail';
 import Admin from './pages/Admin';
 import Evidence from './pages/Evidence';
+import FullMap from './pages/FullMap';
 import Layout from './components/Layout';
 import ThemeProvider from './components/ThemeProvider';
 
@@ -183,6 +184,11 @@ export default function App() {
                 <Navigate to="/login" />
               )
             } 
+          />
+
+          <Route 
+            path="/mapa-completo" 
+            element={<FullMap />} 
           />
 
           <Route path="*" element={<Navigate to="/" />} />

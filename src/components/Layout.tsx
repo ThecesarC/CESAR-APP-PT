@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Target, Rocket, Box, Activity, Palette, Menu, X, LifeBuoy, MapPin } from 'lucide-react';
+import { LogOut, LayoutDashboard, List, FileText, Shield, Heart, Star, Zap, Target, Rocket, Box, Activity, Palette, Menu, X, LifeBuoy, MapPin, ExternalLink } from 'lucide-react';
 import { auth, db } from '../firebase';
 import { signOut } from 'firebase/auth';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
@@ -260,7 +260,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-80 bg-white shadow-2xl z-[60] md:hidden flex flex-col p-6 overflow-y-auto overscroll-contain"
+              className="fixed inset-y-0 left-0 w-80 bg-white shadow-2xl z-[60] md:hidden flex flex-col p-6 h-[100dvh] overflow-y-auto overscroll-contain scrollbar-none"
             >
               <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-3">
@@ -367,29 +367,28 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
                   Soporte
                 </a>
               </div>
-
-              {mapEmbedUrl && (
-                <div className="mt-6 px-2 flex-none flex flex-col h-[400px]">
-                  <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
-                    <iframe 
-                      src={mapEmbedUrl} 
-                      className="w-full h-full border-0"
-                      title="Mapa Territorial Interactivo"
-                    />
-                  </div>
-                  <a 
-                    href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-2 flex items-center justify-center gap-2 py-2.5 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
-                  >
-                    <MapPin className="w-3 h-3" />
-                    Abrir Mapa Completo
-                  </a>
+              
+              {/* Map Invitation Card Mobile */}
+              <div 
+                onClick={() => window.open('/mapa-completo', '_blank')}
+                className="mt-4 p-4 border border-neutral-200 flex flex-col items-center justify-center gap-3 bg-neutral-900 rounded-2xl shadow-xl hover:shadow-2xl transition-all cursor-pointer group relative overflow-hidden shrink-0"
+              >
+                <div className="absolute top-0 right-0 p-3 opacity-10">
+                  <MapPin className="w-16 h-16 text-white" />
                 </div>
-              )}
+                <div className="p-3 bg-red-600 text-white rounded-xl shadow-lg ring-4 ring-white/10 group-hover:scale-110 transition-transform z-10 animate-pulse">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <div className="text-center z-10">
+                  <h3 className="font-black text-white text-xs uppercase tracking-[0.2em] mb-0.5">Mapa Interactivo</h3>
+                  <p className="text-[8px] text-neutral-400 font-medium tracking-wider">CONSULTA DE SECCIONES</p>
+                </div>
+                <div className="w-full bg-red-600 text-white px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-700 text-center transition-all border border-red-500 shadow-lg active:scale-95">
+                  Expandir Mapa
+                </div>
+              </div>
 
-              <div className="mt-auto pt-6 border-t border-neutral-100">
+              <div className="mt-auto pt-6 border-t border-neutral-100 pb-20">
                 <div className="flex items-center gap-3 p-2">
                   <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold">
                     {user?.email?.[0].toUpperCase()}
@@ -406,7 +405,7 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
       </AnimatePresence>
 
       <div className="flex flex-1">
-        <aside className="w-72 bg-white border-r border-neutral-200 hidden md:flex flex-col p-4 gap-2 sticky top-16 h-[calc(100vh-64px)] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-neutral-200">
+        <aside className="w-72 bg-white border-r border-neutral-200 hidden md:flex flex-col p-4 pb-12 gap-2 sticky top-16 h-[calc(100vh-64px)] overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-neutral-200">
           <div className="mb-4 p-4 bg-red-50 rounded-2xl border border-red-100">
             <div className="flex justify-between items-end mb-2">
               <div className="flex items-center gap-1.5">
@@ -479,26 +478,25 @@ export default function Layout({ children, user, isAdmin }: LayoutProps) {
             );
           })}
 
-          {mapEmbedUrl && (
-            <div className="mt-4 mb-4 px-2 flex-none flex flex-col h-[350px]">
-              <div className="relative overflow-hidden rounded-2xl border border-neutral-200 shadow-sm flex-1">
-                <iframe 
-                  src={mapEmbedUrl} 
-                  className="w-full h-full border-0"
-                  title="Mapa Territorial Interactivo"
-                />
-              </div>
-              <a 
-                href="https://www.google.com/maps/d/u/0/edit?mid=1dXnlWGNqkKSoqjUfSLlCSLEEaLjVKfQ&usp=sharing"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 flex items-center justify-center gap-2 py-2 px-4 bg-indigo-600 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
-              >
-                <MapPin className="w-3 h-3" />
-                Abrir Mapa Completo
-              </a>
+          {/* Map Invitation Card Desktop */}
+          <div 
+            onClick={() => window.open('/mapa-completo', '_blank')}
+            className="mt-4 p-5 border border-neutral-200 flex flex-col items-center justify-center gap-3 bg-neutral-900 rounded-[2rem] shadow-lg hover:shadow-xl transition-all cursor-pointer group relative overflow-hidden ring-1 ring-white/10 shrink-0"
+          >
+            <div className="absolute -top-4 -right-4 p-4 opacity-5">
+              <MapPin className="w-16 h-16 text-white" />
             </div>
-          )}
+            <div className="p-3 bg-red-600 text-white rounded-xl shadow-lg ring-4 ring-white/5 group-hover:scale-110 transition-transform z-10 animate-pulse">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <div className="text-center z-10">
+              <h3 className="font-black text-white text-[11px] uppercase tracking-widest mb-0.5">Mapa Territorial</h3>
+              <p className="text-[8px] text-neutral-400 font-bold tracking-tight">VISTA REAL</p>
+            </div>
+            <div className="w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest text-center transition-all shadow-md active:scale-95">
+              Expandir
+            </div>
+          </div>
         </aside>
 
         <main className="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">

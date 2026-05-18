@@ -8,13 +8,16 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword
 } from 'firebase/auth';
-import { getFirestore, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, getDocFromServer } from 'firebase/firestore';
+import { initializeFirestore, collection, addDoc, serverTimestamp, query, orderBy, onSnapshot, doc, setDoc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export { firebaseConfig }; // Export config for secondary instances
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Use initializeFirestore without force long polling to allow more efficient WebSocket-based streams
+export const db = initializeFirestore(app, {}, firebaseConfig.firestoreDatabaseId || '(default)');
+
 export const googleProvider = new GoogleAuthProvider();
 
 export { 

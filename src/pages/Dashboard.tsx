@@ -253,7 +253,7 @@ export default function Dashboard({ user, isAdmin }: { user: any, isAdmin: boole
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-32 md:pb-8">
       {Array.from(new Set(dashboardOrder || [])).map((item) => (
         <React.Fragment key={item}>
           {item === 'welcome' && (
